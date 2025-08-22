@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Poppins } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import { Toaster } from "react-hot-toast";
+import AuthProvider from "@/components/AuthProvider";
+import Script from "next/script";
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -23,8 +26,16 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${poppins.variable} antialiased`}>
-        <Navbar />
-        {children}
+        <AuthProvider>
+          <Toaster position="top-center" />
+          <Navbar />
+          {children}
+        </AuthProvider>
+
+        <Script
+          src="https://checkout.razorpay.com/v1/checkout.js"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );

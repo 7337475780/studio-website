@@ -15,10 +15,13 @@
     "axios": "^1.11.0",
     "framer-motion": "^12.23.12",
     "next": "15.5.0",
+    "razorpay": "^2.9.6",
     "react": "19.1.0",
     "react-calendar": "^6.0.0",
     "react-dom": "19.1.0",
-    "react-image-gallery": "^1.4.0"
+    "react-hot-toast": "^2.6.0",
+    "react-image-gallery": "^1.4.0",
+    "stripe": "^18.4.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
