@@ -1,7 +1,16 @@
 import React from "react";
+import ImageGallery from "react-image-gallery";
+import "react-image-gallery/styles/css/image-gallery.css";
 
-const Gallery = () => {
-  return <div></div>;
-};
+interface Photo {
+  original: string;
+  thumbnail: string;
+  description?: string;
+}
 
-export default Gallery;
+interface GalleryProps {
+  photos: Photo[];
+}
+export default function Gallery({ photos }: GalleryProps) {
+  return <ImageGallery items={photos} showPlayButton={false} />;
+}
