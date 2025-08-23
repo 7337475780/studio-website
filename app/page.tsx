@@ -6,6 +6,8 @@ import Testimonials from "@/components/Testimonials";
 import { services, testimonials } from "@/lib/data";
 import { supabase } from "@/lib/supabaseClient";
 import React, { useEffect, useState } from "react";
+import ContactSection from "./contact/page";
+import Footer from "@/components/Footer";
 
 interface Photo {
   id: number;
@@ -40,6 +42,8 @@ const Page = () => {
       <Gallery photos={photos} /> {/* only pass photos */}
       <Services services={services} />
       <Testimonials testimonials={testimonials} />
+      <ContactSection />
+      <Footer />
     </div>
   );
 };

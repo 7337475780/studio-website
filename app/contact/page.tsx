@@ -33,7 +33,7 @@ const ContactSection = () => {
 
       const data = await res.json();
       if (res.ok) {
-        toast.success("Message sent successfully!");
+        toast.success("Message sent successfully! We will contact you Sooner");
         setFormData({ name: "", email: "", phone: "", message: "" });
       } else {
         toast.error(data.error || "Failed to send message");
@@ -61,9 +61,12 @@ const ContactSection = () => {
   }, []);
 
   return (
-    <section id="contact" className="py-16 bg-gray-900 text-white">
-      <div className="container mx-auto px-6 text-center">
-        <h2 className="text-4xl font-bold mb-12">Book Your Session</h2>
+    <section
+      id="contact"
+      className="py-16  h-[calc(100vh-1rem-42px)] bg-black text-white"
+    >
+      <div className="container shadow-2xl mx-auto px-6 text-center">
+        <h2 className="text-4xl font-bold mb-12">Contact Us</h2>
         <div
           ref={formRef}
           className="max-w-lg mx-auto bg-black/50 p-8 rounded-lg shadow-lg"
@@ -75,7 +78,7 @@ const ContactSection = () => {
               placeholder="Your Name"
               value={formData.name}
               onChange={handleChange}
-              className="w-full px-4 py-2 rounded border border-gray-700 bg-gray-800 text-white"
+              className="w-full px-4 py-2 rounded-full border border-gray-700 bg-gray-800 text-white"
               required
             />
             <input
@@ -84,7 +87,7 @@ const ContactSection = () => {
               placeholder="Your Email"
               value={formData.email}
               onChange={handleChange}
-              className="w-full px-4 py-2 rounded border border-gray-700 bg-gray-800 text-white"
+              className="w-full px-4 py-2 rounded-full border border-gray-700 bg-gray-800 text-white"
               required
             />
             <input
@@ -93,20 +96,20 @@ const ContactSection = () => {
               placeholder="Your Phone (optional)"
               value={formData.phone}
               onChange={handleChange}
-              className="w-full px-4 py-2 rounded border border-gray-700 bg-gray-800 text-white"
+              className="w-full px-4 py-2 rounded-full border border-gray-700 bg-gray-800 text-white"
             />
             <textarea
               name="message"
               placeholder="Your Message"
               value={formData.message}
               onChange={handleChange}
-              className="w-full px-4 py-2 rounded border border-gray-700 bg-gray-800 text-white"
+              className="w-full px-4 py-2 rounded-lg border border-gray-700 bg-gray-800 text-white"
               rows={4}
               required
             />
             <button
               type="submit"
-              className="w-full py-2 bg-blue-600 rounded hover:bg-blue-700 transition"
+              className="w-full py-2 bg-blue-600 rounded-full hover:bg-blue-700 transition"
             >
               Send Message
             </button>
