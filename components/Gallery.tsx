@@ -4,10 +4,11 @@ import React, { useRef, useEffect, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/dist/ScrollTrigger";
 import "react-image-gallery/styles/css/image-gallery.css";
+import { usePathname, useRouter } from "next/navigation";
 
 gsap.registerPlugin(ScrollTrigger);
 
-interface Photo {
+export interface Photo {
   id: number;
   original?: string;
   image_url?: string;
@@ -26,6 +27,8 @@ export default function Gallery({ photos, normalImages }: GalleryProps) {
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [fadeAnim, setFadeAnim] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
 
   // Open lightbox
   const openLightbox = (index: number) => {
@@ -171,6 +174,19 @@ export default function Gallery({ photos, normalImages }: GalleryProps) {
             ›
           </button>
         </div>
+      )}
+
+      {pathname !== "/gallery" ? (
+        <div className="w-full justify-center items-center flex mb-12">
+          <button
+            onClick={() => router.push("/gallery")}
+            className="text-lg  text-center bg-blue-600 px-4 cursor-pointer py-2 rounded-full hover:bg-blue-700"
+          >
+            View All Images
+          </button>
+        </div>
+      ) : (
+        <div></div>
       )}
     </>
   );

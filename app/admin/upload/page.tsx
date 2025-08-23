@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import toast from "react-hot-toast";
 
@@ -9,7 +9,22 @@ const supabase = createClientComponentClient();
 export default function AdminUpload() {
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Update preview whenever file changes
+  useEffect(() => {
+    if (!file) {
+      setPreview(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setPreview(objectUrl);
+
+    // Clean up memory when component unmounts or file changes
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
 
   const handleUpload = async () => {
     if (!file || !title) {
@@ -52,6 +67,7 @@ export default function AdminUpload() {
       toast.success("Photo uploaded successfully!");
       setTitle("");
       setFile(null);
+      setPreview(null);
     } catch (err: any) {
       console.error(err);
       toast.error("Upload failed: " + err.message);
@@ -62,7 +78,7 @@ export default function AdminUpload() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-black p-4">
-      <h1 className="text-3xl font-bold mb-6">Admin Photo Upload</h1>
+      <h1 className="text-3xl font-bold mb-6 text-white">Admin Photo Upload</h1>
 
       <input
         type="text"
@@ -78,6 +94,18 @@ export default function AdminUpload() {
         onChange={(e) => setFile(e.target.files?.[0] || null)}
         className="mb-4"
       />
+
+      {/* Preview */}
+      {preview && (
+        <div className="mb-4">
+          <p className="text-white mb-2">Preview:</p>
+          <img
+            src={preview}
+            alt="Preview"
+            className="max-w-md rounded shadow-lg border"
+          />
+        </div>
+      )}
 
       <button
         onClick={handleUpload}
