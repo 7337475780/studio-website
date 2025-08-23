@@ -62,15 +62,24 @@ const Navbar = () => {
   return (
     <nav className="bg-[rgba(0,0,0,0.4)] sticky top-0 z-50 backdrop-blur-md text-white p-2 flex justify-between items-center">
       {/* Logo */}
-      <div>
-        <Link href="/">
+      <div className="flex items-center justify-center">
+        <Link
+          href="/"
+          className="flex  items-center justify-center text-2xl gap-2"
+        >
           <Image
             src="/images/logo.png"
-            width={42}
-            height={42}
+            width={32}
+            height={32}
             className="rounded"
             alt="Suresh Digitals's logo"
           />
+          <h1
+            className="text-2xl sm:text-3xl font-semibold bg-clip-text text-transparent 
+                       bg-gradient-to-r from-blue-400 via-blue-500 to-gray-400"
+          >
+            Suresh Digitals
+          </h1>
         </Link>
       </div>
 
