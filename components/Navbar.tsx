@@ -117,7 +117,7 @@ const Navbar = () => {
       {isOpen && (
         <div
           ref={linksRef}
-          className="absolute top-full right-0 w-[40%] rounded bg-[rgba(0,0,0,0.4)] backdrop-blur-3xl flex flex-col items-center md:hidden"
+          className="absolute top-full right-0 w-[40%] rounded bg-[rgba(0,0,0,0.4)] backdrop-blur-md flex flex-col items-center md:hidden"
         >
           {NavbarItems.map(({ label, path }) => {
             const isActive = pathname === path;
