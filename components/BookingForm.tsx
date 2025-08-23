@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { supabase } from "@/lib/supabaseClient";
 import { PiSpinner } from "react-icons/pi";
 import BookingCalendar from "./Calendar"; // Dark-themed calendar
+import { useRouter } from "next/navigation";
 
 declare global {
   interface Window {
@@ -12,6 +13,8 @@ declare global {
 }
 
 const BookingForm = () => {
+  const router = useRouter();
+
   const [userId, setUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -59,88 +62,101 @@ const BookingForm = () => {
 
     setLoading(true);
 
-    const { data: booking, error } = await supabase
-      .from("Bookings")
-      .insert([
-        {
-          user_id: userId,
-          date: selectedDate.toISOString().split("T")[0],
-          time: selectedTime,
-          status: "pending",
-          package_id: selectedPackage,
-        },
-      ])
-      .select()
-      .single();
+    try {
+      // 1️⃣ Create booking with pending status
+      const { data: booking, error } = await supabase
+        .from("Bookings")
+        .insert([
+          {
+            user_id: userId,
+            date: selectedDate.toISOString().split("T")[0],
+            time: selectedTime,
+            status: "pending",
+            package_id: selectedPackage,
+          },
+        ])
+        .select()
+        .single();
 
-    setLoading(false);
+      if (error || !booking)
+        throw new Error(error?.message || "Booking failed");
 
-    if (error || !booking) {
-      toast.error(error?.message || "Error creating booking");
-      return;
-    }
+      toast.success("Booking created! Proceeding to payment...");
 
-    toast.success("Booking created! Proceeding to payment...");
+      const pkg = packages.find((p) => p.id === selectedPackage);
+      const res = await fetch("/api/razorpay/order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: pkg?.price || 500,
+          bookingId: booking.id,
+        }),
+      });
 
-    // Create Razorpay order
-    const pkg = packages.find((p) => p.id === selectedPackage);
-    const res = await fetch("/api/razorpay/order", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amount: pkg?.price || 500,
-        bookingId: booking.id,
-      }),
-    });
-    const order = await res.json();
+      const order = await res.json();
 
-    const options = {
-      key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
-      amount: order.amount,
-      currency: "INR",
-      name: "Suresh Digitals",
-      description: `${pkg?.name} Package`,
-      order_id: order.id,
-      handler: async (response: any) => {
-        try {
-          const verifyRes = await fetch("/api/razorpay/verify", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              bookingId: booking.id,
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            }),
-          });
-          const verifyData = await verifyRes.json();
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
+        amount: order.amount,
+        currency: "INR",
+        name: "Suresh Digitals",
+        description: `${pkg?.name} Package`,
+        order_id: order.id,
+        handler: async (response: any) => {
+          try {
+            const verifyRes = await fetch("/api/razorpay/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                bookingId: booking.id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            });
 
-          if (verifyData.success) {
-            toast.success("Payment successful! Booking confirmed.");
-          } else {
-            toast.error("Payment verification failed!");
+            const verifyData = await verifyRes.json();
+
+            if (verifyData.success) {
+              toast.success("Payment successful! Booking confirmed.");
+
+              // ✅ Update booking status to 'paid'
+              await supabase
+                .from("Bookings")
+                .update({ status: "paid" })
+                .eq("id", booking.id);
+
+              router.push("/bookings");
+            } else {
+              toast.error("Payment verification failed!");
+            }
+          } catch (err) {
+            console.error("Verify error:", err);
+            toast.error("Error verifying payment");
           }
-        } catch (err) {
-          console.error("Verify error:", err);
-          toast.error("Error verifying payment");
-        }
-      },
-      theme: { color: "#1e3a8a" },
-    };
+        },
+        theme: { color: "#1e3a8a" },
+      };
 
-    const rzp = new window.Razorpay(options);
-    rzp.open();
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (err: any) {
+      toast.error(err.message || "Booking failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Auth loading / login UI
   if (authLoading) {
     return (
-      <div className="flex gap-1 justify-center items-center h-40">
+      <div className="flex gap-2 justify-center items-center h-40">
         <PiSpinner className="animate-spin text-xl" />
         <p>Checking login status...</p>
       </div>
     );
   }
+
   if (!userId) {
     return (
       <div className="flex flex-col items-center justify-center h-60 gap-4">
@@ -164,7 +180,8 @@ const BookingForm = () => {
   }
 
   return (
-    <div className="max-w-md mx-auto p-4 rounded shadow-md bg-gray-900 text-white">
+    <div className="max-w-md mx-auto p-6 rounded shadow-md bg-gray-900 text-white">
+      {/* Calendar */}
       <BookingCalendar
         date={selectedDate}
         setDate={setSelectedDate}
@@ -172,6 +189,7 @@ const BookingForm = () => {
         setTime={setSelectedTime}
       />
 
+      {/* Package Selector */}
       <div className="mt-4">
         <label className="block mb-2 font-medium">Select Package:</label>
         <select
@@ -187,6 +205,20 @@ const BookingForm = () => {
         </select>
       </div>
 
+      {/* Booking Summary */}
+      {selectedPackage && (
+        <div className="mt-4 p-4 bg-gray-800 rounded border border-gray-700">
+          <h4 className="font-semibold text-lg">
+            {packages.find((p) => p.id === selectedPackage)?.name}
+          </h4>
+          <p>Price: ₹{packages.find((p) => p.id === selectedPackage)?.price}</p>
+          <p className="text-gray-400 text-sm mt-1">
+            Selected Date: {selectedDate.toDateString()} at {selectedTime}
+          </p>
+        </div>
+      )}
+
+      {/* Book Button */}
       <button
         onClick={handleBooking}
         disabled={loading}
@@ -194,6 +226,13 @@ const BookingForm = () => {
       >
         {loading ? "Booking..." : "Book Now"}
       </button>
+
+      {/* Loading Overlay */}
+      {loading && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+          <PiSpinner className="animate-spin text-4xl text-white" />
+        </div>
+      )}
     </div>
   );
 };
