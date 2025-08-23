@@ -1,9 +1,9 @@
 "use client";
-import "react-calendar/dist/Calendar.css";
-import React, { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
-import Calendar from "react-calendar";
+import { supabase } from "@/lib/supabaseClient";
+import { PiSpinner } from "react-icons/pi";
+import BookingCalendar from "./Calendar"; // Dark-themed calendar
 
 declare global {
   interface Window {
@@ -14,59 +14,48 @@ declare global {
 const BookingForm = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [date, setDate] = useState(new Date());
-  const [time, setTime] = useState("10:00");
   const [loading, setLoading] = useState(false);
-  const [bookedSlots, setBookedSlots] = useState<string[]>([]);
+
+  const [packages, setPackages] = useState<
+    { id: string; name: string; price: number }[]
+  >([]);
+  const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
+
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedTime, setSelectedTime] = useState("10:00");
+
+  // Fetch packages
+  useEffect(() => {
+    const fetchPackages = async () => {
+      const res = await fetch("/api/packages");
+      const data = await res.json();
+      setPackages(data);
+      if (data.length > 0) setSelectedPackage(data[0].id);
+    };
+    fetchPackages();
+  }, []);
 
   // Get logged-in user
   useEffect(() => {
     const getUser = async () => {
       setAuthLoading(true);
       const { data, error } = await supabase.auth.getUser();
-      if (error) console.error("Error fetching user:", error.message);
+      if (error) console.error(error.message);
       setUserId(data?.user?.id ?? null);
       setAuthLoading(false);
     };
     getUser();
 
-    // Listen for auth changes
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setUserId(session?.user?.id ?? null);
-      }
+      (_event, session) => setUserId(session?.user?.id ?? null)
     );
-
-    return () => {
-      listener.subscription.unsubscribe();
-    };
+    return () => listener.subscription.unsubscribe();
   }, []);
-
-  // Fetch booked slots for selected date
-  useEffect(() => {
-    const fetchBookedSlots = async () => {
-      const selectedDate = date.toISOString().split("T")[0];
-      const { data, error } = await supabase
-        .from("Bookings")
-        .select("time")
-        .eq("date", selectedDate);
-
-      if (error) {
-        console.error("Error fetching slots:", error.message);
-      } else {
-        setBookedSlots(data?.map((d) => d.time) || []);
-      }
-    };
-    fetchBookedSlots();
-  }, [date]);
 
   // Handle booking + payment
   const handleBooking = async () => {
     if (!userId) return toast.error("Please log in to book a session");
-
-    if (bookedSlots.includes(time)) {
-      return toast.error("This time slot is already booked");
-    }
+    if (!selectedPackage) return toast.error("Please select a package");
 
     setLoading(true);
 
@@ -75,10 +64,10 @@ const BookingForm = () => {
       .insert([
         {
           user_id: userId,
-          date: date.toISOString().split("T")[0],
-          time,
+          date: selectedDate.toISOString().split("T")[0],
+          time: selectedTime,
           status: "pending",
-          package_id: 1,
+          package_id: selectedPackage,
         },
       ])
       .select()
@@ -86,33 +75,34 @@ const BookingForm = () => {
 
     setLoading(false);
 
-    if (error) {
-      toast.error(error.message);
+    if (error || !booking) {
+      toast.error(error?.message || "Error creating booking");
       return;
     }
 
     toast.success("Booking created! Proceeding to payment...");
 
     // Create Razorpay order
+    const pkg = packages.find((p) => p.id === selectedPackage);
     const res = await fetch("/api/razorpay/order", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: 500, bookingId: booking.id }),
+      body: JSON.stringify({
+        amount: pkg?.price || 500,
+        bookingId: booking.id,
+      }),
     });
     const order = await res.json();
 
-    // Open Razorpay checkout
-    // Inside handleBooking -> options
     const options = {
       key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
       amount: order.amount,
       currency: "INR",
       name: "Suresh Digitals",
-      description: "Photo Session Booking",
+      description: `${pkg?.name} Package`,
       order_id: order.id,
-      handler: async function (response: any) {
+      handler: async (response: any) => {
         try {
-          // Send payment details to backend for verification
           const verifyRes = await fetch("/api/razorpay/verify", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -123,7 +113,6 @@ const BookingForm = () => {
               razorpay_signature: response.razorpay_signature,
             }),
           });
-
           const verifyData = await verifyRes.json();
 
           if (verifyData.success) {
@@ -143,15 +132,15 @@ const BookingForm = () => {
     rzp.open();
   };
 
-  // UI
+  // Auth loading / login UI
   if (authLoading) {
     return (
-      <div className="flex justify-center items-center h-40">
+      <div className="flex gap-1 justify-center items-center h-40">
+        <PiSpinner className="animate-spin text-xl" />
         <p>Checking login status...</p>
       </div>
     );
   }
-
   if (!userId) {
     return (
       <div className="flex flex-col items-center justify-center h-60 gap-4">
@@ -162,7 +151,7 @@ const BookingForm = () => {
           onClick={async () => {
             const { error } = await supabase.auth.signInWithOAuth({
               provider: "google",
-              options: { redirectTo: `${window.location.origin}/` },
+              options: { redirectTo: window.location.origin },
             });
             if (error) toast.error(error.message);
           }}
@@ -175,30 +164,27 @@ const BookingForm = () => {
   }
 
   return (
-    <div className="max-w-md mx-auto p-4 bg-white rounded shadow-md">
-      <h2 className="text-xl font-semibold mb-4 text-center">Book a Session</h2>
-
-      <Calendar
-        value={date}
-        onChange={(value) => {
-          if (value instanceof Date) setDate(value);
-        }}
-        minDate={new Date()}
+    <div className="max-w-md mx-auto p-4 rounded shadow-md bg-gray-900 text-white">
+      <BookingCalendar
+        date={selectedDate}
+        setDate={setSelectedDate}
+        time={selectedTime}
+        setTime={setSelectedTime}
       />
 
       <div className="mt-4">
-        <label className="block mb-2 font-medium">Select Time:</label>
-        <input
-          type="time"
-          value={time}
-          onChange={(e) => setTime(e.target.value)}
-          className="w-full p-2 border rounded"
-        />
-        {bookedSlots.includes(time) && (
-          <p className="text-red-500 text-sm mt-1">
-            This time is already booked. Please choose another
-          </p>
-        )}
+        <label className="block mb-2 font-medium">Select Package:</label>
+        <select
+          value={selectedPackage ?? ""}
+          onChange={(e) => setSelectedPackage(e.target.value)}
+          className="w-full p-2 border rounded bg-gray-800 border-gray-700 text-white"
+        >
+          {packages.map((pkg) => (
+            <option key={pkg.id} value={pkg.id}>
+              {pkg.name} - ₹{pkg.price}
+            </option>
+          ))}
+        </select>
       </div>
 
       <button

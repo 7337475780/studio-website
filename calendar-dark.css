@@ -1,0 +1,27 @@
+/* Dark theme overrides for react-calendar */
+.react-calendar.dark-calendar {
+  background-color: #1f2937;
+  color: #f9fafb;
+  border: none;
+  padding: 1rem;
+  border-radius: 1rem;
+}
+
+.react-calendar.dark-calendar button {
+  color: #f9fafb;
+  background: none;
+}
+
+.react-calendar.dark-calendar button:hover {
+  background-color: #374151;
+}
+
+.react-calendar.dark-calendar .react-calendar__tile--active {
+  background: #2563eb;
+  color: white;
+}
+
+.react-calendar.dark-calendar .react-calendar__tile--now {
+  background: #4b5563;
+  color: #f9fafb;
+}

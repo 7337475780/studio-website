@@ -16,6 +16,9 @@ export const metadata: Metadata = {
   title: "Suresh Digitals",
   description:
     "Suresh Digitals offers professional photography services including weddings, portraits, events, and more. Explore our portfolio, book sessions online, and get high-quality digital or print photos delivered securely. Your memories captured perfectly.",
+  icons: {
+    icon: "/logo.svg",
+  },
 };
 
 export default function RootLayout({
