@@ -5,6 +5,7 @@ import Navbar from "@/components/Navbar";
 import { Toaster } from "react-hot-toast";
 import AuthProvider from "@/components/AuthProvider";
 import Script from "next/script";
+import { NotificationsProvider } from "@/components/NotificationProvider";
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -30,9 +31,11 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${poppins.variable} antialiased`}>
         <AuthProvider>
-          <Toaster position="top-center" />
-          <Navbar />
-          {children}
+          <NotificationsProvider>
+            <Toaster position="top-center" />
+            <Navbar />
+            {children}
+          </NotificationsProvider>
         </AuthProvider>
 
         <Script

@@ -177,7 +177,10 @@ const BookingsPage = () => {
                   <strong>Time:</strong> {b.time}
                 </p>
                 <p>
-                  <strong>Package ID:</strong> {b.package_id}
+                  <strong>Package : </strong> {b.package_id}
+                </p>
+                <p>
+                  <strong>Payment Status : </strong> {b.status.toUpperCase()}
                 </p>
               </div>
               <div>

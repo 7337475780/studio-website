@@ -1,4 +1,3 @@
-// app/api/razorpay/verify/route.ts
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabase } from "@/lib/supabaseClient";
@@ -12,6 +11,26 @@ export async function POST(req: Request) {
       razorpay_signature,
     } = await req.json();
 
+    if (
+      !bookingId ||
+      !razorpay_order_id ||
+      !razorpay_payment_id ||
+      !razorpay_signature
+    ) {
+      return NextResponse.json(
+        { success: false, message: "Missing required payment details" },
+        { status: 400 }
+      );
+    }
+
+    const uuidRegex = /^[0-9a-fA-F-]{36}$/;
+    if (!uuidRegex.test(bookingId)) {
+      return NextResponse.json(
+        { success: false, message: "Invalid bookingId" },
+        { status: 400 }
+      );
+    }
+
     const keySecret = process.env.RAZORPAY_KEY_SECRET!;
     if (!keySecret) {
       return NextResponse.json(
@@ -20,7 +39,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Verify Razorpay signature
+    // Verify signature
     const body = `${razorpay_order_id}|${razorpay_payment_id}`;
     const expectedSignature = crypto
       .createHmac("sha256", keySecret)
@@ -34,20 +53,26 @@ export async function POST(req: Request) {
       );
     }
 
-    //Signature valid → Update booking as paid
-    const { error } = await supabase
+    // Update booking atomically
+    const { data, error } = await supabase
       .from("Bookings")
-      .update({
-        status: "paid",
-        payment_id: razorpay_payment_id,
-      })
-      .eq("id", bookingId);
+      .update({ status: "paid", payment_id: razorpay_payment_id })
+      .eq("id", bookingId)
+      .eq("status", "pending")
+      .select();
 
     if (error) {
       console.error("Supabase update error:", error);
       return NextResponse.json(
         { success: false, message: "Failed to update booking" },
         { status: 500 }
+      );
+    }
+
+    if (!data || data.length === 0) {
+      return NextResponse.json(
+        { success: false, message: "Booking not found or already paid" },
+        { status: 404 }
       );
     }
 

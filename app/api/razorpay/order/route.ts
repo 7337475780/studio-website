@@ -9,11 +9,13 @@ export async function POST(req: Request) {
   try {
     const { amount, bookingId } = await req.json();
 
-    if (!amount || !bookingId) {
-      return NextResponse.json(
-        { error: "Amount and bookingId are required" },
-        { status: 400 }
-      );
+    if (!amount || isNaN(amount) || amount <= 0) {
+      return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
+    }
+
+    const uuidRegex = /^[0-9a-fA-F-]{36}$/;
+    if (!bookingId || !uuidRegex.test(bookingId)) {
+      return NextResponse.json({ error: "Invalid bookingId" }, { status: 400 });
     }
 
     const key = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!;
@@ -27,7 +29,7 @@ export async function POST(req: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        amount: amount * 100, // in paise
+        amount: amount * 100, // paise
         currency: "INR",
         receipt: makeReceipt(bookingId),
       }),
@@ -46,7 +48,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ...data,
-      key, // pass key to frontend
+      key, // frontend needs the key to open Razorpay checkout
     });
   } catch (err: any) {
     console.error("Razorpay order error:", err);

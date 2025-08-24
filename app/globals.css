@@ -26,3 +26,41 @@ body {
   overflow-x: hidden;
 }
 
+/* For Webkit browsers (Chrome, Safari) */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 2px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent; /* light gray track */
+  border-radius: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: #3b82f6; /* blue thumb */
+  border-radius: 6px;
+}
+
+/* Hide scrollbar while still scrollable */
+.hide-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Dark mode */
+.dark .scrollbar-thin::-webkit-scrollbar-track {
+  background: #1f2937; /* dark gray track */
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: #60a5fa; /* lighter blue thumb */
+}
+
+/* Firefox */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #3b82f6 #e5e7eb; /* thumb color, track color */
+}
