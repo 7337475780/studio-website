@@ -35,13 +35,13 @@ const BookingsPage = () => {
     fetchUser();
   }, []);
 
-  // Fetch bookings & subscribe to real-time updates
+  // Fetch bookings & subscribe to realtime updates
   useEffect(() => {
     if (!userId) return;
 
     const fetchBookings = async () => {
       const { data, error } = await supabase
-        .from<Booking>("Bookings")
+        .from("Bookings")
         .select("*")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
@@ -50,62 +50,45 @@ const BookingsPage = () => {
         toast.error("Error fetching bookings");
         console.error(error);
       } else {
-        setBookings(data || []);
+        setBookings((data as Booking[]) || []);
       }
       setLoading(false);
     };
 
     fetchBookings();
 
-    // ✅ Supabase v2 Realtime channel
-    const bookingChannel = supabase
+    // Realtime subscription
+    const channel = supabase
       .channel(`realtime-bookings-${userId}`)
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
           table: "Bookings",
           filter: `user_id=eq.${userId}`,
         },
-        (payload: { new: Booking }) => {
-          setBookings((prev) => [payload.new, ...prev]);
-          toast.success("New booking added!");
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "Bookings",
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload: { new: Booking }) => {
-          setBookings((prev) =>
-            prev.map((b) => (b.id === payload.new.id ? payload.new : b))
-          );
-          toast(`Booking updated: ${payload.new.date} at ${payload.new.time}`);
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "DELETE",
-          schema: "public",
-          table: "Bookings",
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload: { old: Booking }) => {
-          setBookings((prev) => prev.filter((b) => b.id !== payload.old.id));
-          toast.error("Booking cancelled");
+        (payload: any) => {
+          if (payload.eventType === "INSERT") {
+            setBookings((prev) => [payload.new, ...prev]);
+            toast.success("New booking added!");
+          } else if (payload.eventType === "UPDATE") {
+            setBookings((prev) =>
+              prev.map((b) => (b.id === payload.new.id ? payload.new : b))
+            );
+            toast(
+              `Booking updated: ${payload.new.date} at ${payload.new.time}`
+            );
+          } else if (payload.eventType === "DELETE") {
+            setBookings((prev) => prev.filter((b) => b.id !== payload.old.id));
+            toast.error("Booking cancelled");
+          }
         }
       )
       .subscribe();
 
-    // Cleanup
     return () => {
-      bookingChannel.unsubscribe();
+      channel.unsubscribe();
     };
   }, [userId]);
 
@@ -177,10 +160,10 @@ const BookingsPage = () => {
                   <strong>Time:</strong> {b.time}
                 </p>
                 <p>
-                  <strong>Package : </strong> {b.package_id}
+                  <strong>Package:</strong> {b.package_id}
                 </p>
                 <p>
-                  <strong>Payment Status : </strong> {b.status.toUpperCase()}
+                  <strong>Payment Status:</strong> {b.status.toUpperCase()}
                 </p>
               </div>
               <div>

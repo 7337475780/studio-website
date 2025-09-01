@@ -3,7 +3,6 @@
 import React, { useRef, useEffect, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/dist/ScrollTrigger";
-import "react-image-gallery/styles/css/image-gallery.css";
 import { usePathname, useRouter } from "next/navigation";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -17,30 +16,41 @@ export interface Photo {
 }
 
 interface GalleryProps {
-  photos: Photo[]; // full-screen lightbox images
-  normalImages?: Photo[]; // normal images shown in grid
+  photos: Photo[];
+  normalImages?: Photo[];
+  previewCount?: number;
 }
 
-export default function Gallery({ photos, normalImages }: GalleryProps) {
-  const galleryRef = useRef<HTMLDivElement>(null);
-  const headingRef = useRef<HTMLHeadingElement>(null);
+export default function Gallery({
+  photos,
+  normalImages,
+  previewCount = 9,
+}: GalleryProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [fadeAnim, setFadeAnim] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
-  // Open lightbox
-  const openLightbox = (index: number) => {
-    setLightboxIndex(index);
-  };
+  const allImages = [
+    ...(photos || []).map((img) => ({
+      src: img.original || img.image_url,
+      title: img.title || img.description || "Photo",
+    })),
+    ...(normalImages || []).map((img) => ({
+      src: img.original || img.image_url,
+      title: img.title || img.description || "Photo",
+    })),
+  ];
 
-  // Close lightbox
-  const closeLightbox = () => {
-    setLightboxIndex(null);
-  };
+  const displayedImages =
+    pathname !== "/gallery" ? allImages.slice(0, previewCount) : allImages;
 
-  // Navigate lightbox
+  const openLightbox = (index: number) => setLightboxIndex(index);
+  const closeLightbox = () => setLightboxIndex(null);
+
   const nextImage = () => {
     if (lightboxIndex === null) return;
     setFadeAnim(true);
@@ -63,81 +73,65 @@ export default function Gallery({ photos, normalImages }: GalleryProps) {
     }, 200);
   };
 
-  // GSAP stagger animation
+  // Horizontal scroll-trigger animation only for showcase
   useEffect(() => {
-    if (!galleryRef.current) return;
+    if (!containerRef.current || pathname === "/gallery") return;
+
+    const totalWidth = scrollRef.current?.scrollWidth || 0;
+    const viewportWidth = scrollRef.current?.clientWidth || 0;
 
     const ctx = gsap.context(() => {
-      const letters = headingRef.current?.querySelectorAll("span");
-      if (letters) {
-        gsap.from(letters, {
-          y: 50,
-          opacity: 0,
-          stagger: 0.05,
-          duration: 1,
-          ease: "power3.out",
-          scrollTrigger: {
-            trigger: galleryRef.current,
-            start: "top 80%",
-            end: "bottom top",
-            scrub: 1,
-          },
-        });
-      }
-
-      gsap.from(galleryRef.current.children, {
-        y: 50,
-        opacity: 0,
-        stagger: 0.15,
-        duration: 1,
-        ease: "power3.out",
+      gsap.to(scrollRef.current, {
+        x: -(totalWidth - viewportWidth),
+        ease: "none",
         scrollTrigger: {
-          trigger: galleryRef.current,
-          start: "top 90%",
-          end: "bottom top",
-          scrub: 1,
+          trigger: containerRef.current,
+          start: "top center",
+          end: () => `+=${totalWidth - viewportWidth + window.innerHeight}`,
+          scrub: true,
+          anticipatePin: 1,
         },
       });
-    }, galleryRef);
+    }, containerRef);
 
     return () => ctx.revert();
-  }, [photos, normalImages]);
-
-  // Normalize images for lightbox
-  const allImages = [
-    ...(photos || []).map((img) => ({
-      src: img.original || img.image_url,
-      title: img.title || img.description || "Photo",
-    })),
-    ...(normalImages || []).map((img) => ({
-      src: img.original || img.image_url,
-      title: img.title || img.description || "Photo",
-    })),
-  ];
+  }, [displayedImages, pathname]);
 
   return (
     <>
-      <h1
-        ref={headingRef}
-        className="text-center text-3xl md:text-5xl font-bold my-6"
-      >
+      <h1 className="text-center text-3xl md:text-5xl font-bold my-6">
         Gallery
       </h1>
 
-      <div
-        ref={galleryRef}
-        className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-6xl mx-auto mb-12"
-      >
-        {allImages.map((img, idx) => (
-          <img
-            key={`img-${idx}`}
-            src={img.src}
-            alt={img.title}
-            className="w-full h-40 md:h-60 object-cover rounded-lg shadow-lg cursor-pointer hover:scale-105 transition"
-            onClick={() => openLightbox(idx)}
-          />
-        ))}
-      </div>
+      {pathname !== "/gallery" ? (
+        // Horizontal scroll showcase with animation
+        <div ref={containerRef} className="w-full h-64 overflow-hidden mb-12">
+          <div ref={scrollRef} className="flex gap-4 h-full">
+            {displayedImages.map((img, idx) => (
+              <img
+                key={`img-${idx}`}
+                src={img.src}
+                alt={img.title}
+                className="w-60 h-full object-cover rounded-lg shadow-lg flex-shrink-0 cursor-pointer"
+                onClick={() => openLightbox(idx)}
+              />
+            ))}
+          </div>
+        </div>
+      ) : (
+        // Grid layout for /gallery
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-6xl mx-auto mb-12">
+          {displayedImages.map((img, idx) => (
+            <img
+              key={`img-${idx}`}
+              src={img.src}
+              alt={img.title}
+              className="w-full h-40 md:h-60 object-cover rounded-lg shadow-lg cursor-pointer hover:scale-105 transition"
+              onClick={() => openLightbox(idx)}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Lightbox Overlay */}
       {lightboxIndex !== null && (
@@ -176,17 +170,16 @@ export default function Gallery({ photos, normalImages }: GalleryProps) {
         </div>
       )}
 
-      {pathname !== "/gallery" ? (
+      {/* View All button */}
+      {pathname !== "/gallery" && allImages.length > previewCount && (
         <div className="w-full justify-center items-center flex mb-12">
           <button
             onClick={() => router.push("/gallery")}
-            className="text-lg  text-center bg-blue-600 px-4 cursor-pointer py-2 rounded-full hover:bg-blue-700"
+            className="text-lg text-center bg-blue-600 px-4 cursor-pointer py-2 rounded-full hover:bg-blue-700"
           >
             View All Images
           </button>
         </div>
-      ) : (
-        <div></div>
       )}
     </>
   );

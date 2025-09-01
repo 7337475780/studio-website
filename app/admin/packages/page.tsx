@@ -64,6 +64,15 @@ export default function PackagesPage() {
   useEffect(() => {
     fetchPackages();
   }, []);
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      gsap.fromTo(
+        modalRef.current,
+        { opacity: 0, y: -50, scale: 0.9 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "power3.out" }
+      );
+    }
+  }, [isOpen]);
 
   // Save or update package
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
@@ -179,7 +188,7 @@ export default function PackagesPage() {
       {/* Search & Filter */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6 items-start sm:items-center">
         <div className="relative w-full sm:w-1/3">
-          <FaSearch className="absolute top-3 left-3 text-gray-400" />
+          <FaSearch className="absolute top-4 left-3 text-gray-400" />
           <input
             type="text"
             placeholder="Search packages..."
@@ -253,12 +262,12 @@ export default function PackagesPage() {
 
       {/* Add/Edit Modal */}
       {isOpen && (
-        <div className="fixed inset-0 flex items-center justify-center bg-[rgba(0,0,0,0.1)] backdrop-blur-md bg-opacity-50 z-50">
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-md z-50">
           <div
             ref={modalRef}
-            className="bg-black p-6 rounded-2xl shadow-2xl w-full max-w-md"
+            className="bg-gradient-to-br from-gray-900 to-gray-800 border border-gray-700 p-6 rounded-3xl shadow-2xl w-full max-w-md transform scale-95 opacity-0"
           >
-            <h2 className="text-2xl font-bold mb-5 text-amber-400">
+            <h2 className="text-2xl font-extrabold mb-5 text-center bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-pink-500 to-red-500">
               {editingPackage ? "Edit Package" : "Add Package"}
             </h2>
             <form onSubmit={handleSave} className="space-y-4">
@@ -267,14 +276,14 @@ export default function PackagesPage() {
                 name="name"
                 placeholder="Package Name"
                 defaultValue={editingPackage?.name || ""}
-                className="w-full p-3 border border-gray-300  rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
+                className="w-full p-3 border border-gray-600 rounded-xl bg-gray-900 text-white placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:outline-none transition"
                 required
               />
               <textarea
                 name="description"
                 placeholder="Description"
                 defaultValue={editingPackage?.description || ""}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
+                className="w-full p-3 border border-gray-600 rounded-xl bg-gray-900 text-white placeholder-gray-400 focus:ring-2  focus:ring-purple-500 focus:outline-none transition"
                 rows={3}
               />
               <input
@@ -282,24 +291,24 @@ export default function PackagesPage() {
                 name="price"
                 placeholder="Price"
                 defaultValue={editingPackage?.price || ""}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
+                className="w-full p-3 border border-gray-600 rounded-xl bg-gray-900 text-white placeholder-gray-400 focus:ring-2  focus:ring-purple-500 focus:outline-none transition"
                 required
               />
               <div className="flex justify-end gap-3 mt-4">
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  className="px-5 py-2 bg-red-600 cursor-pointer rounded-lg hover:bg-red-500 transition"
+                  className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl shadow-md transition transform hover:scale-105"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className={`px-5 cursor-pointer py-2 rounded-lg text-white ${
+                  className={`px-5 py-2 rounded-xl text-white shadow-md transition transform hover:scale-105 ${
                     loading
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-indigo-600 hover:bg-indigo-700"
+                      ? "bg-gray-500 cursor-not-allowed"
+                      : "bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-purple-600 hover:to-indigo-600"
                   }`}
                 >
                   {loading ? "Saving..." : "Save"}
