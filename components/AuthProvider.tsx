@@ -56,7 +56,12 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
             // Insert default profile
             const { data: insertedProfile, error: insertError } = await supabase
               .from("profiles")
-              .insert({ id: currentUser.id, role: "user" })
+              .insert({
+                id: currentUser.id,
+                role: "user",
+                email: currentUser.email,
+                username: currentUser.user_metadata?.full_name || "User",
+              })
               .select()
               .single();
 

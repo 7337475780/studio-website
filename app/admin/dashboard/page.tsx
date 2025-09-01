@@ -2,35 +2,33 @@
 
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { FaUsers, FaImage, FaBook, FaCheck } from "react-icons/fa";
+import { FaUsers, FaImage, FaBook, FaClock } from "react-icons/fa";
+import { useRouter } from "next/navigation";
 
 export default function AdminDashboard() {
   const [totalUsers, setTotalUsers] = useState(0);
   const [totalPhotos, setTotalPhotos] = useState(0);
   const [totalBookings, setTotalBookings] = useState(0);
   const [pendingRequests, setPendingRequests] = useState(0);
+  const router = useRouter();
 
   useEffect(() => {
     const fetchData = async () => {
-      // ✅ Users count (from profiles table if exists, else auth.users)
       const { count: usersCount } = await supabase
         .from("profiles")
         .select("*", { count: "exact", head: true });
       setTotalUsers(usersCount || 0);
 
-      // ✅ Photos count
       const { count: photosCount } = await supabase
         .from("photos")
         .select("*", { count: "exact", head: true });
       setTotalPhotos(photosCount || 0);
 
-      // ✅ Bookings count
       const { count: bookingsCount } = await supabase
         .from("Bookings")
         .select("*", { count: "exact", head: true });
       setTotalBookings(bookingsCount || 0);
 
-      // ✅ Pending requests count
       const { count: pendingCount } = await supabase
         .from("Bookings")
         .select("*", { count: "exact", head: true })
@@ -41,37 +39,58 @@ export default function AdminDashboard() {
     fetchData();
   }, []);
 
+  const stats = [
+    {
+      title: "Total Users",
+      value: totalUsers,
+      icon: <FaUsers className="text-4xl text-blue-400" />,
+      gradient: "from-blue-500/30 to-blue-800/30",
+      page: "/admin/users",
+    },
+    {
+      title: "Total Photos",
+      value: totalPhotos,
+      icon: <FaImage className="text-4xl text-pink-400" />,
+      gradient: "from-pink-500/30 to-pink-800/30",
+      page: "/admin/photos",
+    },
+    {
+      title: "All Bookings",
+      value: totalBookings,
+      icon: <FaBook className="text-4xl text-green-400" />,
+      gradient: "from-green-500/30 to-green-800/30",
+      page: "/admin/bookings",
+    },
+    {
+      title: "Pending Requests",
+      value: pendingRequests,
+      icon: <FaClock className="text-4xl text-yellow-400" />,
+      gradient: "from-yellow-500/30 to-yellow-800/30",
+      page: "/admin/requests",
+    },
+  ];
+
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-6 text-white">Admin Dashboard</h1>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        {/* Users */}
-        <div className="bg-[#0a1528] p-6 rounded-xl shadow-lg flex flex-col items-center">
-          <FaUsers className="text-3xl text-blue-400 mb-2" />
-          <h2 className="text-lg font-semibold text-white">Total Users</h2>
-          <p className="text-2xl font-bold text-white">{totalUsers}</p>
-        </div>
+    <div className="p-8 min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] text-white">
+      <h1 className="text-4xl font-extrabold mb-8 text-center">
+        Admin Dashboard
+      </h1>
 
-        {/* Photos */}
-        <div className="bg-[#0a1528] p-6 rounded-xl shadow-lg flex flex-col items-center">
-          <FaImage className="text-3xl text-blue-400 mb-2" />
-          <h2 className="text-lg font-semibold text-white">Total Photos</h2>
-          <p className="text-2xl font-bold text-white">{totalPhotos}</p>
-        </div>
-
-        {/* Bookings */}
-        <div className="bg-[#0a1528] p-6 rounded-xl shadow-lg flex flex-col items-center">
-          <FaBook className="text-3xl text-blue-400 mb-2" />
-          <h2 className="text-lg font-semibold text-white">All Bookings</h2>
-          <p className="text-2xl font-bold text-white">{totalBookings}</p>
-        </div>
-
-        {/* Pending Requests */}
-        <div className="bg-[#0a1528] p-6 rounded-xl shadow-lg flex flex-col items-center">
-          <FaCheck className="text-3xl text-blue-400 mb-2" />
-          <h2 className="text-lg font-semibold text-white">Pending Requests</h2>
-          <p className="text-2xl font-bold text-white">{pendingRequests}</p>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {stats.map((stat, idx) => (
+          <div
+            key={idx}
+            onClick={() => router.push(stat.page)}
+            className={`relative group cursor-pointer bg-gradient-to-br ${stat.gradient} rounded-2xl p-6 shadow-xl border border-white/10 backdrop-blur-md transform transition duration-300 hover:scale-105 hover:shadow-2xl`}
+          >
+            <div className="absolute -top-5 -right-5 bg-black/30 rounded-full p-3">
+              {stat.icon}
+            </div>
+            <h2 className="text-lg font-semibold opacity-80">{stat.title}</h2>
+            <p className="text-4xl font-extrabold mt-3">{stat.value}</p>
+            <div className="mt-4 h-1 w-20 bg-gradient-to-r from-white/60 to-transparent rounded-full" />
+          </div>
+        ))}
       </div>
     </div>
   );

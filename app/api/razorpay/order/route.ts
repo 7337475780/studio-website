@@ -29,29 +29,25 @@ export async function POST(req: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        amount: amount * 100, // paise
+        amount: amount * 100,
         currency: "INR",
         receipt: makeReceipt(bookingId),
       }),
     });
 
+    const data = await orderRes.json();
+
     if (!orderRes.ok) {
-      const errorData = await orderRes.json();
-      console.error("Razorpay API Error:", errorData);
+      console.error("Razorpay API Error:", data);
       return NextResponse.json(
-        { error: "Razorpay order creation failed", details: errorData },
+        { error: "Razorpay order creation failed", details: data },
         { status: orderRes.status }
       );
     }
 
-    const data = await orderRes.json();
-
-    return NextResponse.json({
-      ...data,
-      key, // frontend needs the key to open Razorpay checkout
-    });
+    return NextResponse.json({ ...data, key });
   } catch (err: any) {
-    console.error("Razorpay order error:", err);
+    console.error("Order error:", err);
     return NextResponse.json(
       { error: "Failed to create order" },
       { status: 500 }
