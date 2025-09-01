@@ -1,11 +1,12 @@
-import Services from "@/components/ServiceCard";
-import { services } from "@/lib/data";
-import React from "react";
+"use client";
+import Services, { Service } from "@/components/ServiceCard";
+import { supabase } from "@/lib/supabaseClient";
+import React, { useEffect, useState } from "react";
 
 const page = () => {
   return (
     <div>
-      <Services services={services} />
+      <Services />
     </div>
   );
 };

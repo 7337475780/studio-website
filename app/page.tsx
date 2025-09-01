@@ -1,9 +1,9 @@
 "use client";
 import Gallery from "@/components/Gallery";
 import HeroSection from "@/components/HeroSection";
-import Services from "@/components/ServiceCard";
+import Services, { Service } from "@/components/ServiceCard";
 import Testimonials from "@/components/Testimonials";
-import { services, testimonials } from "@/lib/data";
+import { testimonials } from "@/lib/data";
 import { supabase } from "@/lib/supabaseClient";
 import React, { useEffect, useState } from "react";
 import ContactSection from "./contact/page";
@@ -17,7 +17,7 @@ interface Photo {
 
 const Page = () => {
   const [photos, setPhotos] = useState<Photo[]>([]);
-
+  const [services, setServices] = useState<Service[]>([]);
   useEffect(() => {
     const fetchPhotos = async () => {
       const { data, error } = await supabase
@@ -40,7 +40,7 @@ const Page = () => {
     <div>
       <HeroSection />
       <Gallery photos={photos} /> {/* only pass photos */}
-      <Services services={services} />
+      <Services />
       <Testimonials testimonials={testimonials} />
       <ContactSection />
       <Footer />

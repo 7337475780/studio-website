@@ -33,6 +33,11 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "**.supabase.co",
       },
+      {
+        protocol: "https",
+        hostname: "res.cloudinary.com",
+        pathname: "/dtsdku445/**", // your Cloudinary folder or path
+      },
     ],
   },
   typescript: {

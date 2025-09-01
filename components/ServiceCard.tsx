@@ -1,165 +1,137 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { IoClose } from "react-icons/io5";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/dist/ScrollTrigger";
-import { usePathname, useRouter } from "next/navigation";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
-gsap.registerPlugin(ScrollTrigger);
+const supabase = createClientComponentClient();
 
 export interface Service {
+  id: string;
   title: string;
   description: string;
-  image: string;
-  galleryImages?: string[];
 }
 
-const Services = ({ services }: { services: Service[] }) => {
+export interface ServiceImage {
+  id: string;
+  service_title: string;
+  image_url: string;
+}
+
+const ServiceCard = () => {
+  const [services, setServices] = useState<Service[]>([]);
+  const [serviceImages, setServiceImages] = useState<ServiceImage[]>([]);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [gallery, setGallery] = useState<ServiceImage[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-  const cardsRef = useRef<HTMLDivElement[]>([]);
-  const modalRef = useRef<HTMLDivElement>(null);
-  const galleryRefs = useRef<HTMLDivElement[]>([]);
-  const router = useRouter();
-  const pathname = usePathname();
-
-  // Animate cards with ScrollTrigger
-  useEffect(() => {
-    cardsRef.current.forEach((card) => {
-      gsap.fromTo(
-        card,
-        { opacity: 0, y: 80, scale: 0.9 },
-        {
-          opacity: 1,
-          y: 0,
-          scale: 1,
-          duration: 0.6,
-          ease: "power3.out",
-          scrollTrigger: {
-            trigger: card,
-            start: "top 85%",
-            toggleActions: "play play reverse reverse", // animate in on scroll down, reverse on scroll up
-          },
-        }
-      );
-    });
-  }, []);
-
-  // Animate modal open
-  useEffect(() => {
-    if (selectedService && modalRef.current) {
-      gsap.fromTo(
-        modalRef.current,
-        { opacity: 0, scale: 0.9 },
-        { opacity: 1, scale: 1, duration: 0.4, ease: "power3.out" }
-      );
-
-      // Animate gallery images inside modal
-      galleryRefs.current.forEach((img, idx) => {
-        gsap.fromTo(
-          img,
-          { opacity: 0, y: 30 },
-          {
-            opacity: 1,
-            y: 0,
-            duration: 0.5,
-            delay: idx * 0.1,
-            ease: "power3.out",
-          }
-        );
-      });
-    }
-  }, [selectedService]);
-
-  const handleCloseModal = () => {
-    if (modalRef.current) {
-      gsap.to(modalRef.current, {
-        opacity: 0,
-        scale: 0.9,
-        duration: 0.3,
-        ease: "power3.in",
-        onComplete: () => {
-          setSelectedService(null);
-          setLightboxIndex(null);
-          galleryRefs.current = [];
-        },
-      });
-    } else {
-      setSelectedService(null);
-      setLightboxIndex(null);
-      galleryRefs.current = [];
-    }
+  // Fetch services
+  const fetchServices = async () => {
+    const { data, error } = await supabase
+      .from("services")
+      .select("id, title, description");
+    if (error) return console.error(error);
+    if (data) setServices(data);
   };
 
-  return (
-    <section id="services" className="py-16 bg-black">
-      <div className="container mx-auto px-6 text-center">
-        <h2 className="text-4xl font-bold mb-12 text-white">Our Services</h2>
+  // Fetch all service images
+  const fetchAllImages = async () => {
+    const { data, error } = await supabase
+      .from("service_images")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (error) return console.error(error);
+    if (data) setServiceImages(data);
+  };
 
+  useEffect(() => {
+    fetchServices();
+    fetchAllImages();
+  }, []);
+
+  // Set gallery for selected service
+  useEffect(() => {
+    if (selectedService) {
+      const images = serviceImages.filter(
+        (img) => img.service_title === selectedService.title
+      );
+      setGallery(images);
+    }
+  }, [selectedService, serviceImages]);
+
+  return (
+    <section className="py-16 bg-black text-white">
+      <div className="container mx-auto px-6 text-center">
+        <h2 className="text-4xl font-bold mb-12">Our Services</h2>
         <div className="grid md:grid-cols-3 gap-8">
-          {services.map((service, idx) => (
-            <div
-              key={idx}
-              ref={(el) => {
-                if (el) cardsRef.current[idx] = el;
-              }}
-              className="bg-[rgba(0,0,0,0.4)] backdrop-blur-3xl border border-gray-100/40 rounded-lg shadow-lg overflow-hidden cursor-pointer hover:scale-105 transition-transform duration-300"
-              onClick={() => setSelectedService(service)}
-            >
-              <Image
-                src={service.image}
-                alt={service.title}
-                width={500}
-                height={400}
-                className="w-full h-48 object-cover"
-              />
-              <div className="p-6">
-                <h3 className="text-xl font-semibold text-amber-400">
-                  {service.title}
-                </h3>
-                <p className="text-blue-400 mt-2">{service.description}</p>
+          {services.map((service) => {
+            const mainImage = serviceImages.find(
+              (img) => img.service_title === service.title
+            );
+            return (
+              <div
+                key={service.id}
+                className="bg-[rgba(0,0,0,0.4)] backdrop-blur-3xl border border-gray-100/40 rounded-lg shadow-lg overflow-hidden cursor-pointer hover:scale-105 transition-transform duration-300"
+                onClick={() => setSelectedService(service)}
+              >
+                {mainImage && (
+                  <Image
+                    src={mainImage.image_url}
+                    alt={service.title}
+                    width={500}
+                    height={400}
+                    className="w-full h-48 object-cover"
+                  />
+                )}
+                <div className="p-6">
+                  <h3 className="text-xl font-semibold text-amber-400">
+                    {service.title}
+                  </h3>
+                  <p className="text-blue-400 mt-2">{service.description}</p>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       {/* Modal */}
       {selectedService && (
-        <div className="fixed inset-0 bg-[rgba(0,0,0,0.4)] backdrop-blur-3xl bg-opacity-70 flex items-center justify-center z-50">
-          <div
-            ref={modalRef}
-            className="rounded-lg p-6 max-w-4xl w-full relative bg-white"
-          >
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-4xl w-full relative">
             <button
-              onClick={handleCloseModal}
-              className="absolute top-4 right-4 text-blue-600 cursor-pointer hover:text-blue-600/80"
+              onClick={() => setSelectedService(null)}
+              className="absolute top-4 right-4 text-gray-900 dark:text-white"
             >
               <IoClose size={28} />
             </button>
+
             <h3 className="text-2xl font-bold mb-4 text-blue-600">
               {selectedService.title}
             </h3>
             <p className="mb-6 text-gray-600">{selectedService.description}</p>
 
+            {/* Gallery */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {selectedService.galleryImages?.map((img, idx) => (
-                <Image
-                  key={idx}
-                  ref={(el) => {
-                    if (el) galleryRefs.current[idx] = el;
-                  }}
-                  src={img}
-                  alt={`${selectedService.title} ${idx + 1}`}
-                  width={400}
-                  height={300}
-                  className="w-full h-32 object-cover rounded-lg hover:scale-105 transition cursor-pointer"
-                  onClick={() => setLightboxIndex(idx)}
-                />
-              ))}
+              {gallery.length > 0 ? (
+                gallery.map((img, idx) => (
+                  <div key={img.id} className="relative">
+                    <Image
+                      src={img.image_url}
+                      alt={selectedService.title}
+                      width={400}
+                      height={300}
+                      className="w-full h-64 object-cover rounded-lg hover:scale-105 transition cursor-pointer"
+                      onClick={() => setLightboxIndex(idx)}
+                    />
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-500 col-span-full">
+                  No images for this service.
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -175,7 +147,7 @@ const Services = ({ services }: { services: Service[] }) => {
             <IoClose size={36} />
           </button>
           <Image
-            src={selectedService.galleryImages![lightboxIndex]}
+            src={gallery[lightboxIndex].image_url}
             alt="Lightbox"
             width={1000}
             height={800}
@@ -183,21 +155,8 @@ const Services = ({ services }: { services: Service[] }) => {
           />
         </div>
       )}
-
-      {pathname !== "/services" ? (
-        <div className="mt-12 w-full items-center flex justify-center cursor-pointer">
-          <button
-            onClick={() => router.push("/services")}
-            className="bg-amber-400 text-black font-semibold px-6 py-3 rounded-lg shadow-lg hover:bg-amber-500 transition"
-          >
-            View All Services
-          </button>
-        </div>
-      ) : (
-        <div></div>
-      )}
     </section>
   );
 };
 
-export default Services;
+export default ServiceCard;
