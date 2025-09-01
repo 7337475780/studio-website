@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useCallback } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/dist/ScrollTrigger";
 import { usePathname, useRouter } from "next/navigation";
@@ -31,6 +31,10 @@ export default function Gallery({
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [fadeAnim, setFadeAnim] = useState(false);
+  const [loadedImages, setLoadedImages] = useState<{ [key: string]: boolean }>(
+    {}
+  );
+
   const router = useRouter();
   const pathname = usePathname();
 
@@ -48,32 +52,52 @@ export default function Gallery({
   const displayedImages =
     pathname !== "/gallery" ? allImages.slice(0, previewCount) : allImages;
 
+  // --- Image caching / preloading ---
+  useEffect(() => {
+    const imgCache: HTMLImageElement[] = [];
+    allImages.forEach((img) => {
+      const preloadedImg = new Image();
+      preloadedImg.src = img.src!;
+      preloadedImg.onload = () =>
+        setLoadedImages((prev) => ({ ...prev, [img.src!]: true }));
+      imgCache.push(preloadedImg);
+    });
+    return () => {
+      imgCache.length = 0;
+    };
+  }, [allImages]);
+
+  // --- Lightbox navigation and caching ---
   const openLightbox = (index: number) => setLightboxIndex(index);
   const closeLightbox = () => setLightboxIndex(null);
 
-  const nextImage = () => {
-    if (lightboxIndex === null) return;
-    setFadeAnim(true);
-    setTimeout(() => {
-      setLightboxIndex((prev) =>
-        prev !== null ? (prev + 1) % allImages.length : null
-      );
-      setFadeAnim(false);
-    }, 200);
-  };
+  const changeLightbox = useCallback(
+    (next: boolean) => {
+      if (lightboxIndex === null) return;
+      setFadeAnim(true);
+      setTimeout(() => {
+        const newIndex = next
+          ? (lightboxIndex + 1) % allImages.length
+          : (lightboxIndex - 1 + allImages.length) % allImages.length;
+        setLightboxIndex(newIndex);
+        setFadeAnim(false);
 
-  const prevImage = () => {
-    if (lightboxIndex === null) return;
-    setFadeAnim(true);
-    setTimeout(() => {
-      setLightboxIndex((prev) =>
-        prev !== null ? (prev - 1 + allImages.length) % allImages.length : null
-      );
-      setFadeAnim(false);
-    }, 200);
-  };
+        // Preload next and previous images
+        const nextIndex = (newIndex + 1) % allImages.length;
+        const prevIndex = (newIndex - 1 + allImages.length) % allImages.length;
+        [nextIndex, prevIndex].forEach((i) => {
+          const img = new Image();
+          img.src = allImages[i].src!;
+        });
+      }, 200);
+    },
+    [lightboxIndex, allImages]
+  );
 
-  // Horizontal scroll-trigger animation only for showcase
+  const nextImage = () => changeLightbox(true);
+  const prevImage = () => changeLightbox(false);
+
+  // --- Horizontal scroll-trigger animation only for showcase ---
   useEffect(() => {
     if (!containerRef.current || pathname === "/gallery") return;
 
@@ -97,6 +121,18 @@ export default function Gallery({
     return () => ctx.revert();
   }, [displayedImages, pathname]);
 
+  // --- Keyboard navigation for lightbox ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (lightboxIndex === null) return;
+      if (e.key === "ArrowRight") nextImage();
+      if (e.key === "ArrowLeft") prevImage();
+      if (e.key === "Escape") closeLightbox();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [lightboxIndex, nextImage, prevImage]);
+
   return (
     <>
       <h1 className="text-center text-3xl md:text-5xl font-bold my-6">
@@ -104,7 +140,7 @@ export default function Gallery({
       </h1>
 
       {pathname !== "/gallery" ? (
-        // Horizontal scroll showcase with animation
+        // Horizontal scroll showcase
         <div ref={containerRef} className="w-full h-64 overflow-hidden mb-12">
           <div ref={scrollRef} className="flex gap-4 h-full">
             {displayedImages.map((img, idx) => (
@@ -112,7 +148,13 @@ export default function Gallery({
                 key={`img-${idx}`}
                 src={img.src}
                 alt={img.title}
-                className="w-60 h-full object-cover rounded-lg shadow-lg flex-shrink-0 cursor-pointer"
+                loading="lazy"
+                onLoad={() =>
+                  setLoadedImages((prev) => ({ ...prev, [img.src!]: true }))
+                }
+                className={`w-60 h-full object-cover rounded-lg shadow-lg flex-shrink-0 cursor-pointer transition-opacity duration-300 ${
+                  loadedImages[img.src!] ? "opacity-100" : "opacity-0"
+                }`}
                 onClick={() => openLightbox(idx)}
               />
             ))}
@@ -126,7 +168,13 @@ export default function Gallery({
               key={`img-${idx}`}
               src={img.src}
               alt={img.title}
-              className="w-full h-40 md:h-60 object-cover rounded-lg shadow-lg cursor-pointer hover:scale-105 transition"
+              loading="lazy"
+              onLoad={() =>
+                setLoadedImages((prev) => ({ ...prev, [img.src!]: true }))
+              }
+              className={`w-full h-40 md:h-60 object-cover rounded-lg shadow-lg cursor-pointer hover:scale-105 transition-opacity duration-300 ${
+                loadedImages[img.src!] ? "opacity-100" : "opacity-0"
+              }`}
               onClick={() => openLightbox(idx)}
             />
           ))}
@@ -138,6 +186,8 @@ export default function Gallery({
         <div
           className="fixed inset-0 bg-black/90 flex items-center justify-center z-50"
           onClick={closeLightbox}
+          aria-modal="true"
+          role="dialog"
         >
           <button
             onClick={(e) => {
@@ -145,6 +195,7 @@ export default function Gallery({
               prevImage();
             }}
             className="absolute cursor-pointer left-4 text-white text-3xl md:text-5xl font-bold z-50"
+            aria-label="Previous image"
           >
             ‹
           </button>
@@ -164,6 +215,7 @@ export default function Gallery({
               nextImage();
             }}
             className="absolute cursor-pointer right-4 text-white text-3xl md:text-5xl font-bold z-50"
+            aria-label="Next image"
           >
             ›
           </button>
@@ -175,7 +227,7 @@ export default function Gallery({
         <div className="w-full justify-center items-center flex mb-12">
           <button
             onClick={() => router.push("/gallery")}
-            className="text-lg text-center bg-blue-600 px-4 cursor-pointer py-2 rounded-full hover:bg-blue-700"
+            className="text-lg text-center bg-blue-600 px-4 cursor-pointer py-2 rounded-full hover:bg-blue-700 transition"
           >
             View All Images
           </button>
