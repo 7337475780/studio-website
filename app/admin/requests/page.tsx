@@ -221,13 +221,13 @@ export default function BookingRequestsPage() {
               <div className="mt-4 flex gap-3">
                 <button
                   onClick={() => handleUpdateStatus(booking.id, "accepted")}
-                  className="px-3 py-2 w-full rounded-lg bg-green-500 text-white hover:bg-green-600 transition shadow-md hover:shadow-lg"
+                  className="px-3 cursor-pointer py-2 w-full rounded-lg bg-green-500 text-white hover:bg-green-600 transition shadow-md hover:shadow-lg"
                 >
                   Accept
                 </button>
                 <button
                   onClick={() => handleUpdateStatus(booking.id, "rejected")}
-                  className="px-3 w-full py-2 rounded-lg bg-red-500 text-white  hover:bg-red-600 transition shadow-md hover:shadow-lg"
+                  className="px-3 cursor-pointer w-full py-2 rounded-lg bg-red-500 text-white  hover:bg-red-600 transition shadow-md hover:shadow-lg"
                 >
                   Reject
                 </button>
