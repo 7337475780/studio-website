@@ -260,7 +260,7 @@ export default function AdminDashboard() {
       value: totalPhotos,
       icon: <FaImage className="text-4xl text-pink-400" />,
       gradient: "from-pink-500/30 to-pink-800/30",
-      page: "/admin/photos",
+      page: "/gallery",
     },
     {
       title: "All Bookings",

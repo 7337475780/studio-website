@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { FaPlus, FaEdit, FaTrash, FaSearch } from "react-icons/fa";
+import { FaPlus, FaEdit, FaTrash, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import gsap from "gsap";
 
@@ -10,6 +10,7 @@ export interface Service {
   id: string;
   title: string;
   description: string;
+  category?: string; // New optional category
 }
 
 export default function ServicesAdminPage() {
@@ -29,12 +30,8 @@ export default function ServicesAdminPage() {
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (error) {
-      toast.error("Failed to fetch services");
-      console.error(error);
-    } else {
-      setServices(data || []);
-    }
+    if (error) toast.error("Failed to fetch services");
+    else setServices(data || []);
   };
 
   useEffect(() => {
@@ -67,34 +64,35 @@ export default function ServicesAdminPage() {
     const formData = new FormData(e.currentTarget);
     const title = formData.get("title") as string;
     const description = formData.get("description") as string;
+    const category = formData.get("category") as string;
 
     try {
       if (editingService) {
         const { error } = await supabase
           .from("services")
-          .update({ title, description })
+          .update({ title, description, category })
           .eq("id", editingService.id);
         if (error) throw error;
-
         setServices((prev) =>
           prev.map((s) =>
-            s.id === editingService.id ? { ...s, title, description } : s
+            s.id === editingService.id
+              ? { ...s, title, description, category }
+              : s
           )
         );
         toast.success("Service updated successfully!");
       } else {
         const { data, error } = await supabase
           .from("services")
-          .insert([{ title, description }])
+          .insert([{ title, description, category }])
           .select();
         if (error) throw error;
-
         setServices((prev) => [...(data || []), ...prev]);
         toast.success("Service added successfully!");
       }
     } catch (error: any) {
-      console.error(error);
       toast.error("Error saving service");
+      console.error(error);
     } finally {
       setLoading(false);
       setIsOpen(false);
@@ -110,10 +108,8 @@ export default function ServicesAdminPage() {
       .from("services")
       .delete()
       .eq("id", deleteTarget.id);
-    if (error) {
-      toast.error("Failed to delete service");
-      console.error(error);
-    } else {
+    if (error) toast.error("Failed to delete service");
+    else {
       setServices((prev) => prev.filter((s) => s.id !== deleteTarget.id));
       toast.success("Service deleted successfully!");
     }
@@ -125,14 +121,15 @@ export default function ServicesAdminPage() {
       services.filter(
         (s) =>
           s.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          s.description.toLowerCase().includes(searchTerm.toLowerCase())
+          s.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (s.category?.toLowerCase() || "").includes(searchTerm.toLowerCase())
       ),
     [services, searchTerm]
   );
 
   return (
     <div className="min-h-screen bg-black p-8">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
         <h1 className="text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-500">
           Services Management
         </h1>
@@ -147,6 +144,7 @@ export default function ServicesAdminPage() {
         </button>
       </div>
 
+      {/* Search bar */}
       <div className="relative w-full sm:w-1/3 mb-6">
         <FaSearch className="absolute top-4 left-3 text-gray-400" />
         <input
@@ -156,21 +154,36 @@ export default function ServicesAdminPage() {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full pl-10 p-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
         />
+        {searchTerm && (
+          <button
+            onClick={() => setSearchTerm("")}
+            className="absolute top-3 right-3 text-gray-400 hover:text-white"
+          >
+            <FaTimes />
+          </button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-h-[70vh]  pr-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredServices.length === 0 && (
           <p className="text-gray-400 col-span-full text-center mt-6">
             No services found.
           </p>
         )}
-        {filteredServices.map((service, index) => (
+        {filteredServices.map((service) => (
           <div
             key={service.id}
-            className="bg-gray-900 rounded-2xl shadow-lg p-6 flex flex-col justify-between text-white"
+            className="bg-gray-900 rounded-2xl shadow-lg p-6 flex flex-col justify-between text-white transform transition-transform hover:-translate-y-1 hover:shadow-xl duration-300"
           >
             <div>
-              <h2 className="text-2xl font-semibold">{service.title}</h2>
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-semibold">{service.title}</h2>
+                {service.category && (
+                  <span className="text-xs bg-blue-600 px-2 py-1 rounded-full">
+                    {service.category}
+                  </span>
+                )}
+              </div>
               <p className="mt-2 line-clamp-3">{service.description}</p>
             </div>
             <div className="mt-4 flex justify-end gap-2">
@@ -213,11 +226,18 @@ export default function ServicesAdminPage() {
                 className="w-full p-3 border rounded-xl bg-gray-900 text-white placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:outline-none transition"
                 required
               />
+              <input
+                type="text"
+                name="category"
+                placeholder="Category (optional)"
+                defaultValue={editingService?.category || ""}
+                className="w-full p-3 border rounded-xl bg-gray-900 text-white placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:outline-none transition"
+              />
               <textarea
                 name="description"
                 placeholder="Description"
                 defaultValue={editingService?.description || ""}
-                className="w-full p-3 border rounded-xl bg-gray-900 text-white placeholder-gray-400 focus:ring-2  focus:ring-purple-500 focus:outline-none transition"
+                className="w-full p-3 border rounded-xl bg-gray-900 text-white placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:outline-none transition"
                 rows={3}
               />
               <div className="flex justify-end gap-3 mt-4">
