@@ -28,6 +28,7 @@ import {
   Bar,
   CartesianGrid,
 } from "recharts";
+import Image from "next/image";
 
 type Booking = {
   id: string;
@@ -63,20 +64,29 @@ export default function AdminDashboard() {
   const [showNotif, setShowNotif] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [notificationMsg, setNotificationMsg] = useState("");
+  const [mounted, setMounted] = useState(false);
 
   const router = useRouter();
 
+  // Ensure client-only rendering for hydration safety
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
     fetchStats();
     fetchRecentRequests();
     fetchRecentUsers();
     fetchAnalytics();
-  }, []);
+  }, [mounted]);
 
   useEffect(() => {
+    if (!mounted) return;
     generateNotifications();
-  }, [recentUsers, recentRequests]);
+  }, [recentUsers, recentRequests, mounted]);
 
+  // Fetch counts
   const fetchStats = async () => {
     try {
       const { count: usersCount } = await supabase
@@ -283,13 +293,19 @@ export default function AdminDashboard() {
       title: "Add Package",
       icon: <FaPlus />,
       onClick: () => router.push("/admin/packages"),
-      color: "bg-blue-500 hover:bg-blue-600",
+      color: "bg-blue-500 hover:bg-blue-600 cursor-pointer",
+    },
+    {
+      title: "Upload Photos",
+      icon: <FaImage />,
+      onClick: () => router.push("/admin/upload"),
+      color: "bg-pink-500 hover:bg-pink-600 cursor-pointer",
     },
     {
       title: "Send Notification",
       icon: <FaBell />,
       onClick: () => setShowModal(true),
-      color: "bg-purple-500 hover:bg-purple-600",
+      color: "bg-purple-500 hover:bg-purple-600 cursor-pointer",
     },
     {
       title: "Export Bookings",
@@ -309,7 +325,7 @@ export default function AdminDashboard() {
         link.click();
         URL.revokeObjectURL(url);
       },
-      color: "bg-green-500 hover:bg-green-600",
+      color: "bg-green-500 hover:bg-green-600 cursor-pointer",
     },
   ];
 
@@ -319,6 +335,9 @@ export default function AdminDashboard() {
     setNotificationMsg("");
     setShowModal(false);
   };
+
+  // Prevent SSR mismatches
+  if (!mounted) return null;
 
   return (
     <div className="p-8 min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] text-white relative">
@@ -357,7 +376,7 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* Recent Booking Requests */}
+      {/* Recent Requests */}
       <div className="mb-8">
         <h2 className="text-2xl font-bold mb-4">Recent Booking Requests</h2>
         {recentRequests.length === 0 && (
@@ -460,30 +479,34 @@ export default function AdminDashboard() {
       )}
 
       {/* Notifications Dropdown */}
-      <div className="fixed top-5 right-5">
+      <div className="fixed bottom-2 right-5 z-50">
+        {/* Bell Button */}
         <button
           onClick={() => setShowNotif((prev) => !prev)}
-          className="bg-gray-800/50 p-3 rounded-full shadow-lg hover:bg-gray-700/70"
+          className="bg-gray-800/50 p-3 rounded-full shadow-lg hover:bg-gray-700/70 relative z-50"
         >
           <FaBell className="text-xl text-yellow-400" />
         </button>
+
+        {/* Dropdown */}
         {showNotif && (
-          <div className="mt-2 bg-gray-900 p-4 rounded-2xl shadow-lg w-80 max-h-96 overflow-y-auto">
+          <div className="absolute right-10 bottom-8 mt-2 bg-gray-900 p-4 rounded-2xl shadow-lg w-80 max-h-96 overflow-scroll hide-scrollbar">
             <h4 className="font-semibold mb-2">Notifications</h4>
-            {notifications.length === 0 && (
+            {notifications.length === 0 ? (
               <p className="text-gray-400">No notifications</p>
+            ) : (
+              notifications.map((n) => (
+                <div
+                  key={n.id}
+                  className="mb-2 p-2 rounded-lg bg-gray-800/40 hover:bg-gray-700/50"
+                >
+                  <p className="text-sm">{n.message}</p>
+                  <p className="text-xs text-gray-400">
+                    {new Date(n.created_at).toLocaleString()}
+                  </p>
+                </div>
+              ))
             )}
-            {notifications.map((n) => (
-              <div
-                key={n.id}
-                className="mb-2 p-2 rounded-lg bg-gray-800/40 hover:bg-gray-700/50"
-              >
-                <p className="text-sm">{n.message}</p>
-                <p className="text-xs text-gray-400">
-                  {new Date(n.created_at).toLocaleString()}
-                </p>
-              </div>
-            ))}
           </div>
         )}
       </div>
