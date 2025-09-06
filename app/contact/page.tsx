@@ -25,12 +25,11 @@ const ContactSection = () => {
     message: "",
     _honeypot: "",
   });
-
   const [errors, setErrors] = useState<Errors>({});
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // 🔎 Validation logic
+  // Validation
   const validateField = (name: string, value: string): string | undefined => {
     switch (name) {
       case "name":
@@ -39,14 +38,11 @@ const ContactSection = () => {
       case "email":
         if (!value.trim()) return "Email is required.";
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(value))
-          return "Please enter a valid email address.";
+        if (!emailRegex.test(value)) return "Enter a valid email.";
         break;
       case "phone":
-        if (value.trim()) {
-          const phoneRegex = /^[0-9]{7,15}$/;
-          if (!phoneRegex.test(value)) return "Phone must be 7–15 digits.";
-        }
+        if (value.trim() && !/^[0-9]{7,15}$/.test(value))
+          return "Phone must be 7–15 digits.";
         break;
       case "message":
         if (!value.trim()) return "Message cannot be empty.";
@@ -59,8 +55,6 @@ const ContactSection = () => {
   ) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
-
-    // Live validation as user types
     const errorMsg = validateField(name, value);
     setErrors({ ...errors, [name]: errorMsg });
   };
@@ -81,7 +75,7 @@ const ContactSection = () => {
     if (loading) return;
 
     if (!validateForm()) {
-      toast.error("Please fix the errors in the form.");
+      toast.error("Please fix the errors.");
       return;
     }
 
@@ -97,7 +91,6 @@ const ContactSection = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
-
       const data = await res.json();
       if (res.ok) {
         toast.success("Message sent successfully!");
@@ -114,30 +107,38 @@ const ContactSection = () => {
       } else {
         toast.error(data.error || "Failed to send message");
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
       toast.error("Failed to send message");
     } finally {
       setLoading(false);
     }
   };
 
-  // GSAP animations
+  // GSAP fade-in on scroll
   useEffect(() => {
     if (!formRef.current) return;
-    gsap.from(formRef.current, {
-      opacity: 0,
-      y: 50,
+    const el = formRef.current;
+
+    gsap.set(el, { opacity: 0, y: 50 });
+    const anim = gsap.to(el, {
+      opacity: 1,
+      y: 0,
       duration: 1,
       ease: "power3.out",
       scrollTrigger: {
-        trigger: formRef.current,
+        trigger: el,
         start: "top 85%",
         toggleActions: "play none none reverse",
       },
     });
+
+    return () => {
+      anim.scrollTrigger?.kill();
+      anim.kill();
+    };
   }, []);
 
+  // Floating particles
   useEffect(() => {
     if (!particlesRef.current) return;
     const particles = Array.from(
@@ -147,7 +148,6 @@ const ContactSection = () => {
       const duration = Math.random() * 20 + 15;
       const x = Math.random() * window.innerWidth;
       const y = Math.random() * window.innerHeight;
-
       gsap.set(p, {
         x,
         y,
@@ -171,7 +171,6 @@ const ContactSection = () => {
       id="contact"
       className="relative py-32 bg-gradient-to-b from-black via-gray-900 to-black text-white overflow-hidden"
     >
-      {/* Floating cinematic particles */}
       <div ref={particlesRef} className="absolute inset-0 pointer-events-none">
         {[...Array(25)].map((_, i) => (
           <div
@@ -205,7 +204,6 @@ const ContactSection = () => {
               autoComplete="off"
             />
 
-            {/* Name */}
             <label className="block">
               <input
                 type="text"
@@ -224,7 +222,6 @@ const ContactSection = () => {
               )}
             </label>
 
-            {/* Email */}
             <label className="block">
               <input
                 type="email"
@@ -243,7 +240,6 @@ const ContactSection = () => {
               )}
             </label>
 
-            {/* Phone */}
             <label className="block">
               <input
                 type="text"
@@ -262,7 +258,6 @@ const ContactSection = () => {
               )}
             </label>
 
-            {/* Message */}
             <label className="block">
               <textarea
                 name="message"
@@ -286,12 +281,11 @@ const ContactSection = () => {
             <button
               type="submit"
               disabled={loading}
-              className={`w-full py-3 rounded-2xl text-white font-bold text-lg cursor-pointer transition 
-                ${
-                  loading
-                    ? "bg-gray-600 cursor-not-allowed"
-                    : "bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-400 hover:to-blue-500"
-                }`}
+              className={`w-full py-3 rounded-2xl text-white font-bold text-lg cursor-pointer transition ${
+                loading
+                  ? "bg-gray-600 cursor-not-allowed"
+                  : "bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-400 hover:to-blue-500"
+              }`}
             >
               {loading ? "Sending..." : "Send Message"}
             </button>
