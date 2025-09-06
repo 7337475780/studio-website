@@ -10,18 +10,34 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/AuthProvider";
 import { NavbarItems } from "@/lib/data";
 import NotificationsList from "@/app/admin/dashboard/NotificationList";
+import Cookies from "js-cookie";
 
 const Navbar = () => {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, role } = useAuth();
+  const { user, logout, login } = useAuth();
+
+  const [role, setRole] = useState<string | null>(
+    () => Cookies.get("role") || null
+  );
 
   const [isOpen, setIsOpen] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const linksRef = useRef<HTMLDivElement>(null);
 
+  // Keep role synced with cookie
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const cookieRole = Cookies.get("role") || null;
+      if (cookieRole !== role) setRole(cookieRole);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [role]);
+
+  // Fetch notifications for admin
   useEffect(() => {
     if (role !== "admin") return;
 
@@ -30,7 +46,6 @@ const Navbar = () => {
         .from("notifications")
         .select("*")
         .order("created_at", { ascending: false });
-
       if (!error) setNotifications(data || []);
     };
 
@@ -46,12 +61,34 @@ const Navbar = () => {
       .subscribe();
 
     return () => {
-      // Wrap async cleanup in a synchronous function
       supabase.removeChannel(channel).catch(console.error);
     };
   }, [role]);
 
-  const openMenu = () => setIsOpen(true);
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
+
+  // Mobile menu open animation
+  useEffect(() => {
+    if (!isOpen || !linksRef.current) return;
+
+    setIsAnimating(true);
+    const links = Array.from(linksRef.current.children) as HTMLElement[];
+    gsap.set(links, { y: -20, opacity: 0 });
+    gsap.to(links, {
+      y: 0,
+      opacity: 1,
+      stagger: 0.05,
+      duration: 0.3,
+      ease: "power3.out",
+      onComplete: () => setIsAnimating(false),
+    });
+  }, [isOpen]);
+
+  const openMenu = () => {
+    setShowNotifications(false);
+    setShowProfileDropdown(false);
+    setIsOpen(true);
+  };
 
   const closeMenu = () => {
     if (!linksRef.current) {
@@ -73,32 +110,24 @@ const Navbar = () => {
     });
   };
 
-  const handleNotificationsToggle = () => setShowNotifications((prev) => !prev);
-
-  const handleLogin = async () =>
-    supabase.auth.signInWithOAuth({ provider: "google" });
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/");
+  const handleNotificationsToggle = () => {
+    setShowProfileDropdown(false);
+    setIsOpen(false);
+    setShowNotifications((prev) => !prev);
   };
 
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const handleProfileToggle = () => {
+    setShowNotifications(false);
+    setIsOpen(false);
+    setShowProfileDropdown((prev) => !prev);
+  };
 
   return (
     <nav className="bg-[rgba(0,0,0,0.4)] sticky top-0 z-50 backdrop-blur-md text-white p-2 flex justify-between items-center">
       {/* Logo */}
-      <div className="flex items-center justify-center">
-        <Link
-          href="/"
-          className="flex items-center justify-center text-2xl gap-2"
-        >
-          <Image
-            src="/images/logo.png"
-            width={32}
-            height={32}
-            className="rounded"
-            alt="Suresh Digitals Logo"
-          />
+      <div className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2 text-2xl">
+          <Image src="/images/logo.png" width={32} height={32} alt="Logo" />
           <h1 className="text-2xl sm:text-3xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-blue-500 to-gray-400">
             Suresh Digitals
           </h1>
@@ -106,28 +135,95 @@ const Navbar = () => {
       </div>
 
       {/* Desktop Menu */}
-      <div className="hidden md:flex space-x-4 gap-2 items-center relative">
-        {NavbarItems.map(({ label, path }) => {
-          const isActive = pathname === path;
-          return (
-            <Link
-              className={`relative py-0.5 font-medium text-white
-                before:absolute before:bottom-0 before:left-0 before:h-[2px] 
-                before:w-0 before:bg-blue-400 before:transition-all before:duration-300
-                hover:before:w-full ${
-                  isActive ? "before:w-full" : "before:w-0"
-                }`}
-              key={label}
-              href={path}
-            >
-              {label}
-            </Link>
-          );
-        })}
+      <div className="hidden md:flex items-center gap-4">
+        {NavbarItems.map(({ label, path }) => (
+          <Link
+            key={label}
+            href={path}
+            className={`relative py-1 px-2 hover:text-blue-400 ${
+              pathname === path ? "text-blue-400" : "text-white"
+            }`}
+          >
+            {label}
+          </Link>
+        ))}
 
-        {/* Bell Icon for Notifications */}
+        {/* Admin Notifications */}
         {role === "admin" && (
-          <div className="relative ">
+          <div className="relative">
+            <button
+              onClick={handleNotificationsToggle}
+              className="relative p-2 rounded-full hover:bg-gray-700"
+            >
+              <IoNotificationsOutline size={24} />
+              {unreadCount > 0 && (
+                <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+              )}
+            </button>
+            {showNotifications && (
+              <div className="absolute right-0 mt-2 w-96 max-h-[70vh]  rounded-lg shadow-lg bg-white dark:bg-gray-900 p-2">
+                <NotificationsList initialNotifications={notifications} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Admin Button */}
+        {role === "admin" && (
+          <Link
+            href="/admin/dashboard"
+            className="px-3 py-1 bg-blue-600 rounded hover:bg-blue-700 transition"
+          >
+            Admin
+          </Link>
+        )}
+
+        {/* Profile */}
+        {user?.user_metadata?.avatar_url ? (
+          <div className="relative">
+            <button onClick={handleProfileToggle}>
+              <Image
+                src={user.user_metadata.avatar_url}
+                alt="Profile"
+                width={32}
+                height={32}
+                className="rounded-full cursor-pointer"
+              />
+            </button>
+            {showProfileDropdown && (
+              <div className="absolute right-0 mt-2 w-36 bg-white text-black rounded-lg shadow-lg flex flex-col">
+                <button
+                  onClick={logout}
+                  className="px-4 py-2 hover:bg-gray-200 text-left w-full"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <button
+            onClick={login}
+            className="ml-2 px-3 py-1 bg-blue-600 rounded hover:bg-blue-700 transition"
+          >
+            Login
+          </button>
+        )}
+      </div>
+
+      {/* Mobile Section */}
+      <div className="md:hidden flex items-center gap-2">
+        {role === "admin" && (
+          <Link
+            href="/admin/dashboard"
+            className="px-3 py-1 bg-blue-600 rounded hover:bg-blue-700 transition font-medium"
+          >
+            Admin
+          </Link>
+        )}
+
+        {role === "admin" && (
+          <div className="relative">
             <button
               onClick={handleNotificationsToggle}
               className="relative p-2 cursor-pointer rounded-full hover:bg-gray-700 transition"
@@ -137,54 +233,47 @@ const Navbar = () => {
                 <span className="absolute top-1 right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
               )}
             </button>
-
-            {showNotifications && (
-              <div className="absolute right-0 mt-2 w-full sm:w-96 max-h-[70vh] overflow-hidden rounded-lg shadow-lg bg-white dark:bg-gray-900 p-2">
-                <NotificationsList initialNotifications={notifications} />
-              </div>
-            )}
           </div>
         )}
 
-        {/* Admin Dashboard Link */}
-        {role === "admin" && (
-          <Link
-            href="/admin/dashboard"
-            className="ml-2 px-3 py-1 bg-blue-600 rounded hover:bg-blue-700 transition font-medium"
-          >
-            Admin
-          </Link>
+        {/* Profile */}
+        {user?.user_metadata?.avatar_url && (
+          <div className="relative">
+            <button
+              onClick={handleProfileToggle}
+              className="rounded-full border border-gray-100/20"
+            >
+              <Image
+                src={user.user_metadata.avatar_url}
+                alt="Profile Picture"
+                width={32}
+                height={32}
+                className="rounded-full object-cover cursor-pointer"
+              />
+            </button>
+          </div>
         )}
 
-        {/* Login/Logout */}
-        {user ? (
+        {/* Login Button */}
+        {!user && (
           <button
-            onClick={handleLogout}
-            className="ml-2 px-3 py-1 bg-red-600 rounded hover:bg-red-700 transition"
-          >
-            Logout
-          </button>
-        ) : (
-          <button
-            onClick={handleLogin}
-            className="ml-2 px-3 py-1 bg-blue-600 rounded hover:bg-blue-700 transition"
+            onClick={login}
+            className="px-3 py-1 bg-blue-600 rounded hover:bg-blue-700 transition"
           >
             Login
           </button>
         )}
-      </div>
 
-      {/* Mobile Hamburger */}
-      <div className="md:hidden">
+        {/* Hamburger Menu */}
         <button
           onClick={isOpen ? closeMenu : openMenu}
           aria-label="Menu"
           disabled={isAnimating}
         >
           {isOpen ? (
-            <IoClose className="text-white cursor-pointer" size={24} />
+            <IoClose className="text-white cursor-pointer" size={32} />
           ) : (
-            <IoMenuSharp className="text-white cursor-pointer" size={24} />
+            <IoMenuSharp className="text-white cursor-pointer" size={32} />
           )}
         </button>
       </div>
@@ -195,55 +284,35 @@ const Navbar = () => {
           ref={linksRef}
           className="absolute top-full right-0 w-[40%] rounded bg-[rgba(0,0,0,0.4)] backdrop-blur-md flex flex-col items-center md:hidden"
         >
-          {NavbarItems.map(({ label, path }) => {
-            const isActive = pathname === path;
-            return (
-              <Link
-                className={`py-3 font-medium text-white w-full text-center border-b border-gray-700 ${
-                  isActive ? "bg-blue-500" : "hover:bg-blue-600"
-                }`}
-                key={label}
-                href={path}
-                onClick={closeMenu}
-              >
-                {label}
-              </Link>
-            );
-          })}
-
-          {/* Admin Dashboard */}
-          {role === "admin" && (
+          {NavbarItems.map(({ label, path }) => (
             <Link
-              href="/admin/dashboard"
-              className="py-3 font-medium text-white w-full text-center border-b border-gray-700 hover:bg-blue-600"
+              key={label}
+              href={path}
+              className={`py-3 font-medium text-white w-full text-center border-b border-gray-700 ${
+                pathname === path ? "bg-blue-500" : "hover:bg-blue-600"
+              }`}
               onClick={closeMenu}
             >
-              Admin
+              {label}
             </Link>
-          )}
+          ))}
+        </div>
+      )}
 
-          {/* Login/Logout */}
-          {user ? (
-            <button
-              onClick={() => {
-                handleLogout();
-                closeMenu();
-              }}
-              className="py-3 font-medium text-white w-full text-center border-b border-gray-700 hover:bg-red-700"
-            >
-              Logout
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                handleLogin();
-                closeMenu();
-              }}
-              className="py-3 font-medium text-white w-full text-center border-b border-gray-700 hover:bg-blue-700"
-            >
-              Login
-            </button>
-          )}
+      {/* Mobile Dropdowns */}
+      {showProfileDropdown && user?.user_metadata?.avatar_url && (
+        <div className="absolute top-16 right-2 md:hidden w-36 bg-white dark:bg-gray-900 text-black dark:text-white rounded-lg shadow-lg py-2 flex flex-col">
+          <button
+            onClick={logout}
+            className="px-4 py-2 hover:bg-gray-200 dark:hover:bg-gray-800 text-left w-full"
+          >
+            Logout
+          </button>
+        </div>
+      )}
+      {showNotifications && role === "admin" && (
+        <div className="absolute top-16 right-2 md:hidden w-80 max-h-[70vh] overflow-hidden rounded-lg shadow-lg bg-white dark:bg-gray-900 p-2">
+          <NotificationsList initialNotifications={notifications} />
         </div>
       )}
     </nav>

@@ -8,6 +8,7 @@ import {
   ReactNode,
 } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import Cookies from "js-cookie";
 
 type Profile = {
   id: string;
@@ -21,16 +22,16 @@ type Profile = {
 
 type AuthContextType = {
   user: any | null;
-  role: string | null;
   profile: Profile | null;
+  role: string | null;
   login: () => void;
   logout: () => void;
 };
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
-  role: null,
   profile: null,
+  role: null,
   login: () => {},
   logout: () => {},
 });
@@ -41,73 +42,71 @@ export function useAuth() {
 
 export default function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<any>(null);
-  const [role, setRole] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [role, setRole] = useState<string | null>(
+    () => Cookies.get("role") || null
+  );
 
   useEffect(() => {
     let isMounted = true;
 
-    const initUser = async () => {
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const currentUser = sessionData.session?.user;
+    const fetchProfile = async (currentUser: any) => {
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", currentUser.id)
+        .single();
 
-        if (!isMounted) return;
-        setUser(currentUser || null);
+      if (!isMounted) return;
 
-        if (currentUser) {
-          const { data: profileData, error } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", currentUser.id)
-            .single();
+      if (!profileData) {
+        // Insert default profile
+        const { data: insertedProfile } = await supabase
+          .from("profiles")
+          .insert({
+            id: currentUser.id,
+            role: "user",
+            email: currentUser.email,
+            username:
+              currentUser.user_metadata?.username ||
+              currentUser.email?.split("@")[0] ||
+              "User",
+            full_name:
+              currentUser.user_metadata?.full_name ||
+              currentUser.email?.split("@")[0] ||
+              "User",
+            avatar_url:
+              currentUser.user_metadata?.avatar_url ||
+              currentUser.user_metadata?.picture ||
+              null,
+          })
+          .select()
+          .single();
 
-          if (error && error.code !== "PGRST116") {
-            console.error("❌ Failed to fetch profile:", error.message);
-          }
-
-          if (!profileData) {
-            // Insert default profile
-            const { data: insertedProfile, error: insertError } = await supabase
-              .from("profiles")
-              .insert({
-                id: currentUser.id,
-                role: "user",
-                email: currentUser.email,
-                username:
-                  currentUser.user_metadata?.username ||
-                  currentUser.email?.split("@")[0] ||
-                  "User",
-                full_name:
-                  currentUser.user_metadata?.full_name ||
-                  currentUser.email?.split("@")[0] ||
-                  "User",
-                avatar_url: currentUser.user_metadata?.avatar_url || null,
-              })
-              .select()
-              .single();
-
-            if (insertError) {
-              console.error(
-                "❌ Failed to insert profile:",
-                insertError.message
-              );
-            } else {
-              if (isMounted) {
-                setRole(insertedProfile.role);
-                setProfile(insertedProfile);
-              }
-            }
-          } else {
-            if (isMounted) {
-              setRole(profileData.role);
-              setProfile(profileData);
-            }
-          }
-        }
-      } catch (err) {
-        console.error("❌ Unexpected error initializing profile:", err);
+        setProfile(insertedProfile || null);
+        setRole(insertedProfile?.role || "user");
+        Cookies.set("role", insertedProfile?.role || "user");
+      } else {
+        setProfile({
+          ...profileData,
+          avatar_url:
+            profileData.avatar_url ||
+            currentUser.user_metadata?.avatar_url ||
+            currentUser.user_metadata?.picture ||
+            null,
+        });
+        setRole(profileData.role);
+        Cookies.set("role", profileData.role);
       }
+    };
+
+    const initUser = async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const currentUser = sessionData.session?.user || null;
+      if (!isMounted) return;
+
+      setUser(currentUser);
+      if (currentUser) await fetchProfile(currentUser);
     };
 
     initUser();
@@ -117,12 +116,12 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
         if (!isMounted) return;
         const newUser = session?.user || null;
         setUser(newUser);
-        setRole(null);
-        setProfile(null);
 
-        if (newUser) {
-          // refresh profile when user logs in
-          await initUser();
+        if (newUser) await fetchProfile(newUser);
+        else {
+          setProfile(null);
+          setRole(null);
+          Cookies.remove("role");
         }
       }
     );
@@ -136,13 +135,14 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   const login = () => supabase.auth.signInWithOAuth({ provider: "google" });
   const logout = async () => {
     await supabase.auth.signOut();
-    setRole(null);
-    setProfile(null);
     setUser(null);
+    setProfile(null);
+    setRole(null);
+    Cookies.remove("role");
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, profile, login, logout }}>
+    <AuthContext.Provider value={{ user, profile, role, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
