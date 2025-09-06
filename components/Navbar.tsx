@@ -22,7 +22,6 @@ const Navbar = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const linksRef = useRef<HTMLDivElement>(null);
 
-  // Fetch initial notifications and subscribe to realtime updates
   useEffect(() => {
     if (role !== "admin") return;
 
@@ -46,7 +45,10 @@ const Navbar = () => {
       )
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    return () => {
+      // Wrap async cleanup in a synchronous function
+      supabase.removeChannel(channel).catch(console.error);
+    };
   }, [role]);
 
   const openMenu = () => setIsOpen(true);
@@ -191,7 +193,7 @@ const Navbar = () => {
       {isOpen && (
         <div
           ref={linksRef}
-          className="absolute top-full right-0 w-[70%] rounded bg-[rgba(0,0,0,0.4)] backdrop-blur-md flex flex-col items-center md:hidden"
+          className="absolute top-full right-0 w-[40%] rounded bg-[rgba(0,0,0,0.4)] backdrop-blur-md flex flex-col items-center md:hidden"
         >
           {NavbarItems.map(({ label, path }) => {
             const isActive = pathname === path;
