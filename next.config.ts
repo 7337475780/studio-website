@@ -38,6 +38,14 @@ const nextConfig: NextConfig = {
         hostname: "res.cloudinary.com",
         pathname: "/dtsdku445/**", // your Cloudinary folder or path
       },
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com", // Google profile images
+      },
+      {
+        protocol: "https",
+        hostname: "avatars.githubusercontent.com", // if you use GitHub avatars
+      },
     ],
   },
   typescript: {

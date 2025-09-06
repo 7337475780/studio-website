@@ -1,149 +1,162 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/dist/ScrollTrigger";
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import { supabase } from "@/lib/supabaseClient";
+import ReviewModal from "./ReviewModal";
 
 export interface Testimonial {
-  id: number;
+  id: string; // changed from number -> uuid
   name: string;
   feedback: string;
-  photo?: string;
-  rating?: number; // 1-5 stars
+  rating: number;
+  photo?: string | null;
 }
 
-interface TestimonialsProps {
-  testimonials: Testimonial[];
-}
+export default function Testimonials() {
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-gsap.registerPlugin(ScrollTrigger);
+  // Get initials from name
+  const getInitials = (name: string) => {
+    const parts = name.split(" ");
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (
+      parts[0].charAt(0).toUpperCase() +
+      parts[parts.length - 1].charAt(0).toUpperCase()
+    );
+  };
 
-const Testimonials = ({ testimonials }: TestimonialsProps) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const cardsRef = useRef<HTMLDivElement[]>([]);
-  const starsRefs = useRef<HTMLDivElement[][]>([]);
-
+  // Fetch reviews
   useEffect(() => {
-    if (!containerRef.current) return;
+    const fetchTestimonials = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("reviews")
+        .select("id, name, feedback, rating, photo")
+        .order("created_at", { ascending: false });
 
-    const ctx = gsap.context(() => {
-      cardsRef.current.forEach((card, idx) => {
-        // Animate card entrance
-        gsap.from(card, {
-          opacity: 0,
-          y: 80,
-          scale: 0.85,
-          rotationX: -10,
-          rotationY: 5,
-          transformOrigin: "center center",
-          duration: 0.8,
-          ease: "power3.out",
-          scrollTrigger: {
-            trigger: card,
-            start: "top 80%",
-            toggleActions: "play reverse play reverse",
-          },
-          onComplete: () => {
-            // Animate stars
-            const stars = starsRefs.current[idx];
-            if (stars && stars.length > 0) {
-              gsap.fromTo(
-                stars,
-                { scale: 0, opacity: 0, rotation: -20 },
-                {
-                  scale: 1,
-                  opacity: 1,
-                  rotation: 0,
-                  stagger: 0.1,
-                  duration: 0.4,
-                  ease: "back.out(1.7)",
-                }
-              );
-            }
-          },
-        });
+      if (error) {
+        console.error("Error fetching testimonials:", error.message);
+      } else {
+        setTestimonials(data || []);
+      }
+      setLoading(false);
+    };
 
-        // Hover animation for stars
-        if (starsRefs.current[idx]) {
-          const stars = starsRefs.current[idx];
-          card.addEventListener("mouseenter", () => {
-            gsap.to(stars, {
-              y: -5,
-              rotation: 10,
-              duration: 0.4,
-              stagger: 0.05,
-              ease: "power1.inOut",
-            });
-          });
-          card.addEventListener("mouseleave", () => {
-            gsap.to(stars, {
-              y: 0,
-              rotation: 0,
-              duration: 0.4,
-              stagger: 0.05,
-              ease: "power1.inOut",
-            });
-          });
+    fetchTestimonials();
+
+    // Realtime insert listener
+    const channel = supabase
+      .channel("realtime-reviews")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "reviews" },
+        (payload) => {
+          setTestimonials((prev) => [payload.new as Testimonial, ...prev]);
         }
-      });
-    }, containerRef);
+      )
+      .subscribe();
 
-    return () => ctx.revert();
-  }, [testimonials]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   return (
-    <section className="py-16 bg-black text-white">
+    <section className="py-20 bg-gradient-to-b from-black via-gray-900 to-black text-white relative">
       <div className="container mx-auto px-6 text-center">
-        <h2 className="text-4xl font-bold mb-12">What Our Clients Say</h2>
+        {/* Title */}
+        <h2 className="text-4xl md:text-5xl font-bold mb-12 tracking-wide">
+          What Our Clients Say
+        </h2>
 
-        <div
-          ref={containerRef}
-          className="grid md:grid-cols-3 gap-8 perspective-1000"
-        >
-          {testimonials.map((t, idx) => (
-            <div
-              key={t.id}
-              ref={(el) => el && (cardsRef.current[idx] = el)}
-              className="bg-[rgba(255,255,255,0.05)] p-6 rounded-lg shadow-lg cursor-pointer hover:scale-105 hover:rotateY-2 transition-transform duration-300"
+        {/* Testimonials */}
+        {loading ? (
+          <p className="text-gray-400">Loading reviews...</p>
+        ) : testimonials.length === 0 ? (
+          <div className="text-gray-400">
+            <p>No reviews yet. Be the first to share!</p>
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="mt-4 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-lg font-semibold transition"
             >
-              {t.photo && (
-                <img
-                  src={t.photo}
-                  alt={t.name}
-                  className="w-16 h-16 mx-auto rounded-full mb-4 object-cover"
-                />
-              )}
-              <p className="mb-4 text-gray-200 italic">"{t.feedback}"</p>
-              <h4 className="font-semibold">{t.name}</h4>
+              Write a Review
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {testimonials.map((testimonial) => (
+              <div
+                key={testimonial.id}
+                className="bg-gray-800/60 backdrop-blur-lg border border-gray-700 rounded-2xl p-6 shadow-xl hover:scale-105 transform transition duration-300"
+              >
+                {/* Profile */}
+                <div className="flex items-center mb-4">
+                  {testimonial.photo ? (
+                    <Image
+                      src={testimonial.photo}
+                      alt={testimonial.name}
+                      width={56}
+                      height={56}
+                      className="rounded-full mr-4 object-cover border-2 border-gray-600"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 mr-4 flex items-center justify-center text-lg font-bold text-white shadow-md">
+                      {getInitials(testimonial.name)}
+                    </div>
+                  )}
 
-              {t.rating && (
-                <div
-                  className="flex justify-center mt-2"
-                  ref={(el) => {
-                    if (el)
-                      starsRefs.current[idx] = Array.from(
-                        el.children
-                      ) as HTMLDivElement[];
-                  }}
-                >
-                  {Array.from({ length: t.rating }).map((_, i) => (
-                    <span key={i} className="text-yellow-400 opacity-0 scale-0">
-                      ★
-                    </span>
-                  ))}
-                  {Array.from({ length: 5 - t.rating }).map((_, i) => (
-                    <span key={i} className="text-gray-500 opacity-0 scale-0">
-                      ★
-                    </span>
-                  ))}
+                  <div className="text-left">
+                    <h3 className="font-semibold text-lg">
+                      {testimonial.name}
+                    </h3>
+                    {/* Star Rating */}
+                    <div className="flex space-x-1 mt-1">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <span
+                          key={i}
+                          className={`transition-transform duration-200 ${
+                            i < testimonial.rating
+                              ? "text-yellow-400 hover:scale-110"
+                              : "text-gray-500"
+                          } text-lg`}
+                        >
+                          ★
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
+
+                {/* Feedback */}
+                <p className="text-gray-300 text-left italic leading-relaxed">
+                  “{testimonial.feedback}”
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Review Modal Trigger */}
+        {testimonials.length > 0 && (
+          <div className="mt-12">
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-lg font-semibold transition"
+            >
+              Write a Review
+            </button>
+          </div>
+        )}
+
+        {/* Review Modal */}
+        <ReviewModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+        />
       </div>
     </section>
   );
-};
-
-export default Testimonials;
+}

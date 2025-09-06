@@ -3,7 +3,6 @@ import Gallery from "@/components/Gallery";
 import HeroSection from "@/components/HeroSection";
 import Services, { Service } from "@/components/ServiceCard";
 import Testimonials from "@/components/Testimonials";
-import { testimonials } from "@/lib/data";
 import { supabase } from "@/lib/supabaseClient";
 import React, { useEffect, useState } from "react";
 import ContactSection from "./contact/page";
@@ -41,7 +40,7 @@ const Page = () => {
       <HeroSection />
       <Gallery photos={photos} /> {/* only pass photos */}
       <Services />
-      <Testimonials testimonials={testimonials} />
+      <Testimonials />
       <ContactSection />
       <Footer />
     </div>
