@@ -4,15 +4,51 @@ import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import toast from "react-hot-toast";
 import { PiSpinner } from "react-icons/pi";
+import {
+  FiCheckCircle,
+  FiXCircle,
+  FiClock,
+  FiDollarSign,
+} from "react-icons/fi";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
+import QRCode from "qrcode";
 import gsap from "gsap";
+import confetti from "canvas-confetti";
 
 interface Booking {
   id: string;
+  user_id: string;
   date: string;
   time: string;
-  status: string;
-  package_id: string;
+  status: "accepted" | "pending" | "rejected";
+  package_id: string | null;
+  package_name?: string;
+  package_price?: number;
+  package_image?: string;
+  payment_verified_at?: string | null;
   created_at: string;
+  full_name: string;
+  email: string;
+  mobile: string;
+  location: string;
+}
+
+const statusStyles = {
+  accepted: "bg-green-600 text-white",
+  pending: "bg-yellow-500 text-black",
+  rejected: "bg-red-600 text-white",
+};
+
+const statusIcons = {
+  accepted: <FiCheckCircle className="inline mr-1" />,
+  pending: <FiClock className="inline mr-1" />,
+  rejected: <FiXCircle className="inline mr-1" />,
+};
+
+function FirstLetterToUpperCase(word: string) {
+  if (!word) return "";
+  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
 }
 
 const BookingsPage = () => {
@@ -35,27 +71,55 @@ const BookingsPage = () => {
     fetchUser();
   }, []);
 
-  // Fetch bookings & subscribe to realtime updates
+  // Fetch bookings + packages
   useEffect(() => {
     if (!userId) return;
 
-    const fetchBookings = async () => {
-      const { data, error } = await supabase
-        .from("Bookings")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false });
+    let isMounted = true;
 
-      if (error) {
+    const fetchBookingsWithPackages = async () => {
+      try {
+        const { data: bookingsData, error: bookingsError } = await supabase
+          .from("Bookings")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false });
+
+        if (bookingsError) throw bookingsError;
+
+        const packageIds =
+          bookingsData?.map((b: any) => b.package_id).filter(Boolean) || [];
+
+        let packagesData: any[] = [];
+        if (packageIds.length > 0) {
+          const { data: pkgs, error: packagesError } = await supabase
+            .from("Packages")
+            .select("id, name, price")
+            .in("id", packageIds);
+
+          if (packagesError) throw packagesError;
+          packagesData = pkgs || [];
+        }
+
+        const bookingsWithPackages = (bookingsData || []).map((b: any) => {
+          const pkg = packagesData.find((p) => p.id === b.package_id);
+          return {
+            ...b,
+            package_name: pkg?.name || "Unknown",
+            package_price: pkg?.price,
+          };
+        });
+
+        if (isMounted) setBookings(bookingsWithPackages);
+      } catch (err: any) {
         toast.error("Error fetching bookings");
-        console.error(error);
-      } else {
-        setBookings((data as Booking[]) || []);
+        console.error(err);
+      } finally {
+        if (isMounted) setLoading(false);
       }
-      setLoading(false);
     };
 
-    fetchBookings();
+    fetchBookingsWithPackages();
 
     // Realtime subscription
     const channel = supabase
@@ -69,6 +133,8 @@ const BookingsPage = () => {
           filter: `user_id=eq.${userId}`,
         },
         (payload: any) => {
+          if (!isMounted) return;
+
           if (payload.eventType === "INSERT") {
             setBookings((prev) => [payload.new, ...prev]);
             toast.success("New booking added!");
@@ -76,9 +142,10 @@ const BookingsPage = () => {
             setBookings((prev) =>
               prev.map((b) => (b.id === payload.new.id ? payload.new : b))
             );
-            toast(
-              `Booking updated: ${payload.new.date} at ${payload.new.time}`
-            );
+            if (payload.new.status === "accepted") {
+              confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+              toast.success(`Booking confirmed for ${payload.new.date}!`);
+            }
           } else if (payload.eventType === "DELETE") {
             setBookings((prev) => prev.filter((b) => b.id !== payload.old.id));
             toast.error("Booking cancelled");
@@ -88,11 +155,12 @@ const BookingsPage = () => {
       .subscribe();
 
     return () => {
+      isMounted = false;
       channel.unsubscribe();
     };
   }, [userId]);
 
-  // GSAP animation on bookings list
+  // GSAP animation
   useLayoutEffect(() => {
     if (listRef.current && bookings.length > 0) {
       gsap.from(listRef.current.children, {
@@ -105,11 +173,63 @@ const BookingsPage = () => {
     }
   }, [bookings]);
 
-  // User not logged in
-  if (!userId) {
+  // Download invoice + send email
+  const downloadInvoice = async (b: Booking) => {
+    const doc = new jsPDF();
+
+    doc.setFontSize(18);
+    doc.text("Booking Invoice", 14, 20);
+
+    doc.setFontSize(12);
+    doc.text(`Booking ID: ${b.id}`, 14, 30);
+    doc.text(`Name: ${b.full_name}`, 14, 37);
+    doc.text(`Email: ${b.email}`, 14, 44);
+    doc.text(`Mobile: ${b.mobile}`, 14, 51);
+    doc.text(
+      `Date & Time: ${new Date(b.date).toLocaleDateString()} ${b.time}`,
+      14,
+      58
+    );
+    doc.text(
+      `Package: ${b.package_name || "Unknown"} - ₹${b.package_price || 0}`,
+      14,
+      65
+    );
+
+    // Add table
+    autoTable(doc, {
+      startY: 80,
+      head: [["Package", "Price (₹)"]],
+      body: [[b.package_name || "Unknown", b.package_price || 0]],
+    });
+
+    // Generate QR
+    const qrDataUrl = await QRCode.toDataURL(b.id);
+    doc.addImage(qrDataUrl, "PNG", 150, 20, 40, 40);
+
+    // Save PDF
+    doc.save(`invoice_${b.id}.pdf`);
+
+    // Send email with invoice
+    const pdfBase64 = doc.output("datauristring").split(",")[1];
+    await fetch("/api/send-invoice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: b.email,
+        subject: "Your Booking Invoice",
+        text: `Hi ${b.full_name}, your booking invoice is attached.`,
+        pdfBase64,
+      }),
+    });
+
+    toast.success("Invoice downloaded & emailed!");
+  };
+
+  if (!userId)
     return (
       <div className="flex flex-col items-center justify-center h-60 gap-4">
-        <p className="text-red-500 font-medium">
+        <p className="text-red-400 font-medium text-lg">
           Please log in to view your bookings.
         </p>
         <button
@@ -120,64 +240,82 @@ const BookingsPage = () => {
             });
             if (error) toast.error(error.message);
           }}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+          className="px-5 py-2 bg-gradient-to-r from-blue-500 to-blue-700 text-white font-semibold rounded-lg shadow-lg hover:scale-105 transition-transform duration-300"
         >
           Continue with Google
         </button>
       </div>
     );
-  }
 
-  // Loading state
-  if (loading) {
+  if (loading)
     return (
-      <div className="flex gap-2 justify-center items-center h-40">
-        <PiSpinner className="animate-spin text-xl" />
-        <p>Loading your bookings...</p>
+      <div className="flex flex-col items-center justify-center h-40 gap-3">
+        <PiSpinner className="animate-spin text-3xl text-white" />
+        <p className="text-white text-lg">Loading your bookings...</p>
       </div>
     );
-  }
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6 text-white">Your Bookings</h1>
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 p-6">
+      <h1 className="text-4xl font-bold mb-8 text-white text-center">
+        Your Bookings
+      </h1>
+
       {bookings.length === 0 ? (
-        <p className="text-gray-300 animate-fade-in">
+        <p className="text-gray-400 text-center text-lg animate-fade-in">
           You have no bookings yet.
         </p>
       ) : (
-        <ul ref={listRef} className="space-y-4">
+        <ul ref={listRef} className="space-y-6 max-w-4xl mx-auto">
           {bookings.map((b) => (
             <li
               key={b.id}
-              className="p-4 border rounded bg-[rgba(0,0,0,0.4)] backdrop-blur-3xl text-white flex justify-between items-center"
+              className="p-6 rounded-2xl bg-[rgba(255,255,255,0.05)] backdrop-blur-md border border-gray-700 shadow-lg flex flex-col md:flex-row justify-between items-center hover:scale-105 hover:shadow-2xl transition-transform duration-300"
             >
-              <div>
-                <p>
-                  <strong>Date:</strong> {b.date}
+              <div className="flex-1 space-y-1">
+                <p className="text-sm text-gray-300">
+                  <span className="font-semibold text-white">Date:</span>{" "}
+                  {new Date(b.date).toLocaleDateString()}
                 </p>
-                <p>
-                  <strong>Time:</strong> {b.time}
+                <p className="text-sm text-gray-300">
+                  <span className="font-semibold text-white">Time:</span>{" "}
+                  {b.time}
                 </p>
-                <p>
-                  <strong>Package:</strong> {b.package_id}
+                <p className="text-sm text-gray-300">
+                  <span className="font-semibold text-white">Package:</span>{" "}
+                  {b.package_name}
                 </p>
-                <p>
-                  <strong>Payment Status:</strong> {b.status.toUpperCase()}
+                <p className="text-sm text-gray-300 flex items-center gap-1">
+                  <FiDollarSign />
+                  <span className="font-semibold text-white">Price:</span> ₹
+                  {b.package_price || 0}
+                </p>
+                <p className="text-sm text-gray-300">
+                  <span className="font-semibold text-white">Payment:</span>{" "}
+                  {b.payment_verified_at ? (
+                    <span className="text-green-400">Verified</span>
+                  ) : (
+                    <span className="text-yellow-400">Pending</span>
+                  )}
                 </p>
               </div>
-              <div>
+
+              <div className="mt-3 md:mt-0 flex flex-col gap-2">
                 <span
-                  className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    b.status === "paid"
-                      ? "bg-green-600 text-white"
-                      : b.status === "pending"
-                      ? "bg-yellow-500 text-black"
-                      : "bg-red-600 text-white"
+                  className={`px-4 py-2 rounded-full text-sm font-medium flex items-center justify-center ${
+                    statusStyles[b.status] || "bg-gray-500 text-white"
                   }`}
                 >
-                  {b.status.toUpperCase()}
+                  {statusIcons[b.status]}
+                  {FirstLetterToUpperCase(b.status)}
                 </span>
+
+                <button
+                  onClick={() => downloadInvoice(b)}
+                  className="px-3 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded shadow-sm transition"
+                >
+                  Download
+                </button>
               </div>
             </li>
           ))}

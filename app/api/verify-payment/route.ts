@@ -5,38 +5,57 @@ import { supabase } from "@/lib/supabaseClient";
 export async function POST(req: Request) {
   try {
     const {
+      bookingId,
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
-      bookingId,
     } = await req.json();
 
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    if (
+      !bookingId ||
+      !razorpay_order_id ||
+      !razorpay_payment_id ||
+      !razorpay_signature
+    ) {
+      return NextResponse.json(
+        { success: false, message: "Missing fields" },
+        { status: 400 }
+      );
+    }
 
-    const expectedSignature = crypto
+    // Verify signature
+    const generatedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
-      .update(body.toString())
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
-    if (expectedSignature === razorpay_signature) {
-      // ✅ Verified payment
-      // update booking in Supabase
-      const { data, error } = await supabase
-        .from("Bookings")
-        .update({ status: "paid" })
-        .eq("id", bookingId);
-
-      if (error) throw error;
-
-      return NextResponse.json({ success: true });
-    } else {
+    if (generatedSignature !== razorpay_signature) {
       return NextResponse.json(
         { success: false, message: "Invalid signature" },
         { status: 400 }
       );
     }
+
+    // Update booking status in Supabase
+    const { error } = await supabase
+      .from("Bookings")
+      .update({ status: "paid" })
+      .eq("id", bookingId);
+
+    if (error) {
+      console.error("Supabase update error:", error.message);
+      return NextResponse.json(
+        { success: false, message: "DB update failed" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ success: true, message: "Payment verified" });
   } catch (err: any) {
-    console.error(err);
-    return NextResponse.json({ success: false }, { status: 500 });
+    console.error("Verification error:", err);
+    return NextResponse.json(
+      { success: false, message: "Verification failed" },
+      { status: 500 }
+    );
   }
 }
