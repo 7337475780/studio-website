@@ -1,7 +1,7 @@
-
 export const NavbarItems = [
   { label: "Home", path: "/" },
   { label: "Portfolio", path: "/portfolio" },
+  { label: "My Bookings", path: "/bookings" },
   { label: "Services", path: "/services" },
   { label: "Booking", path: "/booking" },
   { label: "Contact", path: "/contact" },

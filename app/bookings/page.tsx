@@ -8,13 +8,11 @@ import {
   FiCheckCircle,
   FiXCircle,
   FiClock,
-  FiDollarSign,
 } from "react-icons/fi";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import QRCode from "qrcode";
 import gsap from "gsap";
-import confetti from "canvas-confetti";
 
 interface Booking {
   id: string;
@@ -25,13 +23,13 @@ interface Booking {
   package_id: string | null;
   package_name?: string;
   package_price?: number;
-  package_image?: string;
   payment_verified_at?: string | null;
   created_at: string;
   full_name: string;
   email: string;
   mobile: string;
-  location: string;
+  location: string | null; // original coordinates
+  readableLocation?: string; // human-readable address
 }
 
 const statusStyles = {
@@ -50,6 +48,63 @@ function FirstLetterToUpperCase(word: string) {
   if (!word) return "";
   return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
 }
+
+// Convert image URL to base64
+async function getBase64FromUrl(url: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch image: ${url}`);
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(blob);
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+  });
+}
+
+// Convert coordinates to human-readable location using Nominatim
+const getReadableLocation = async (coordsText: string | null) => {
+  if (!coordsText) return "N/A";
+
+  try {
+    let lat: number | null = null;
+    let lng: number | null = null;
+
+    try {
+      const obj = JSON.parse(coordsText);
+      if (obj.lat && obj.lng) {
+        lat = parseFloat(obj.lat);
+        lng = parseFloat(obj.lng);
+      }
+    } catch {
+      const parts = coordsText.replace(/[{}]/g, "").split(",");
+      if (parts.length === 2) {
+        lat = parseFloat(parts[0].split(":")[1] || parts[0]);
+        lng = parseFloat(parts[1].split(":")[1] || parts[1]);
+      }
+    }
+
+    if (lat === null || lng === null || isNaN(lat) || isNaN(lng))
+      return "Invalid coordinates";
+
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+      {
+        headers: {
+          "User-Agent": "BookingsApp/1.0 (your-email@example.com)",
+          "Accept-Language": "en",
+        },
+      }
+    );
+
+    if (!res.ok) return "Unknown location";
+
+    const data = await res.json();
+    return data.display_name || "Unknown location";
+  } catch {
+    return "Unknown location";
+  }
+};
 
 const BookingsPage = () => {
   const [userId, setUserId] = useState<string | null>(null);
@@ -71,92 +126,61 @@ const BookingsPage = () => {
     fetchUser();
   }, []);
 
-  // Fetch bookings + packages
+  // Fetch bookings and resolve readable locations
   useEffect(() => {
     if (!userId) return;
 
     let isMounted = true;
 
-    const fetchBookingsWithPackages = async () => {
-      try {
-        const { data: bookingsData, error: bookingsError } = await supabase
-          .from("Bookings")
-          .select("*")
-          .eq("user_id", userId)
-          .order("created_at", { ascending: false });
+    const fetchBookings = async () => {
+      setLoading(true);
 
-        if (bookingsError) throw bookingsError;
+      const { data, error } = await supabase
+        .from("Bookings")
+        .select(
+          `
+          id,
+          date,
+          time,
+          status,
+          full_name,
+          email,
+          mobile,
+          location,
+          package_id,
+          bookings_package_id_fkey (name, price)
+        `
+        )
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
 
-        const packageIds =
-          bookingsData?.map((b: any) => b.package_id).filter(Boolean) || [];
+      if (error) {
+        console.error("Error fetching bookings:", error.message);
+        toast.error("Failed to load bookings");
+      } else {
+        const normalized = (data || []).map((b: any) => ({
+          ...b,
+          package_name: b.bookings_package_id_fkey?.name || "Unknown",
+          package_price: b.bookings_package_id_fkey?.price || 0,
+        }));
 
-        let packagesData: any[] = [];
-        if (packageIds.length > 0) {
-          const { data: pkgs, error: packagesError } = await supabase
-            .from("Packages")
-            .select("id, name, price")
-            .in("id", packageIds);
-
-          if (packagesError) throw packagesError;
-          packagesData = pkgs || [];
-        }
-
-        const bookingsWithPackages = (bookingsData || []).map((b: any) => {
-          const pkg = packagesData.find((p) => p.id === b.package_id);
-          return {
+        const withLocation = await Promise.all(
+          normalized.map(async (b) => ({
             ...b,
-            package_name: pkg?.name || "Unknown",
-            package_price: pkg?.price,
-          };
-        });
+            readableLocation: await getReadableLocation(b.location),
+          }))
+        );
 
-        if (isMounted) setBookings(bookingsWithPackages);
-      } catch (err: any) {
-        toast.error("Error fetching bookings");
-        console.error(err);
-      } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted) setBookings(withLocation);
       }
+
+      setLoading(false);
     };
 
-    fetchBookingsWithPackages();
-
-    // Realtime subscription
-    const channel = supabase
-      .channel(`realtime-bookings-${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "Bookings",
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload: any) => {
-          if (!isMounted) return;
-
-          if (payload.eventType === "INSERT") {
-            setBookings((prev) => [payload.new, ...prev]);
-            toast.success("New booking added!");
-          } else if (payload.eventType === "UPDATE") {
-            setBookings((prev) =>
-              prev.map((b) => (b.id === payload.new.id ? payload.new : b))
-            );
-            if (payload.new.status === "accepted") {
-              confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-              toast.success(`Booking confirmed for ${payload.new.date}!`);
-            }
-          } else if (payload.eventType === "DELETE") {
-            setBookings((prev) => prev.filter((b) => b.id !== payload.old.id));
-            toast.error("Booking cancelled");
-          }
-        }
-      )
-      .subscribe();
+    fetchBookings();
 
     return () => {
       isMounted = false;
-      channel.unsubscribe();
     };
   }, [userId]);
 
@@ -173,57 +197,75 @@ const BookingsPage = () => {
     }
   }, [bookings]);
 
-  // Download invoice + send email
+  // Download invoice
   const downloadInvoice = async (b: Booking) => {
     const doc = new jsPDF();
+    const issueDate = new Date().toLocaleDateString();
 
-    doc.setFontSize(18);
-    doc.text("Booking Invoice", 14, 20);
-
-    doc.setFontSize(12);
-    doc.text(`Booking ID: ${b.id}`, 14, 30);
-    doc.text(`Name: ${b.full_name}`, 14, 37);
-    doc.text(`Email: ${b.email}`, 14, 44);
-    doc.text(`Mobile: ${b.mobile}`, 14, 51);
-    doc.text(
-      `Date & Time: ${new Date(b.date).toLocaleDateString()} ${b.time}`,
-      14,
-      58
+    const qrDataUrl = await QRCode.toDataURL(
+      JSON.stringify({ bookingId: b.id, customer: b.full_name })
     );
+    doc.addImage(qrDataUrl, "PNG", 160, 10, 35, 35);
+
+    try {
+      const base64Logo = await getBase64FromUrl("/images/logo.png");
+      doc.addImage(base64Logo, "PNG", 14, 10, 30, 30);
+    } catch {
+      doc.setFontSize(22);
+      doc.setFont("helvetica", "bold");
+      doc.text("SURESH DIGITALS", 14, 25);
+    }
+
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+
+    doc.setFillColor(41, 128, 185);
+    doc.rect(0, 45, 210, 12, "F");
+    doc.setFontSize(14);
+    doc.setTextColor(255);
+    doc.setFont("helvetica", "bold");
+    doc.text("INVOICE", 105, 53, { align: "center" });
+
+    doc.setFontSize(11);
+    doc.setTextColor(0);
+    doc.setFont("helvetica", "bold");
+    doc.text("Bill To:", 14, 70);
+    doc.setFont("helvetica", "normal");
+    doc.text(b.full_name, 14, 78);
+    doc.text(b.email, 14, 84);
+    doc.text(b.mobile, 14, 90);
+    doc.text(b.readableLocation || "N/A", 14, 96);
+
+    const pageHeight = doc.internal.pageSize.height;
+    doc.setFontSize(9);
+    doc.setTextColor(100);
     doc.text(
-      `Package: ${b.package_name || "Unknown"} - ₹${b.package_price || 0}`,
+      "Terms: This invoice is computer-generated and valid without signature.",
       14,
-      65
+      pageHeight - 20
+    );
+    doc.setFont("helvetica", "italic");
+    doc.text(
+      "Thank you for choosing Suresh Digitals – We make your memories timeless!",
+      14,
+      pageHeight - 12
     );
 
-    // Add table
+    const base = b.package_price || 0;
     autoTable(doc, {
-      startY: 80,
-      head: [["Package", "Price (₹)"]],
-      body: [[b.package_name || "Unknown", b.package_price || 0]],
+      startY: 110,
+      head: [["Package", "Price"]],
+      body: [[b.package_name || "Unknown", `₹${base.toFixed(2)}`]],
+      styles: { halign: "center", font: "helvetica", fontSize: 11 },
+      headStyles: {
+        fillColor: [41, 128, 185],
+        textColor: 255,
+        fontStyle: "bold",
+      },
     });
 
-    // Generate QR
-    const qrDataUrl = await QRCode.toDataURL(b.id);
-    doc.addImage(qrDataUrl, "PNG", 150, 20, 40, 40);
-
-    // Save PDF
     doc.save(`invoice_${b.id}.pdf`);
-
-    // Send email with invoice
-    const pdfBase64 = doc.output("datauristring").split(",")[1];
-    await fetch("/api/send-invoice", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        to: b.email,
-        subject: "Your Booking Invoice",
-        text: `Hi ${b.full_name}, your booking invoice is attached.`,
-        pdfBase64,
-      }),
-    });
-
-    toast.success("Invoice downloaded & emailed!");
   };
 
   if (!userId)
@@ -286,7 +328,6 @@ const BookingsPage = () => {
                   {b.package_name}
                 </p>
                 <p className="text-sm text-gray-300 flex items-center gap-1">
-                  <FiDollarSign />
                   <span className="font-semibold text-white">Price:</span> ₹
                   {b.package_price || 0}
                 </p>
@@ -298,12 +339,16 @@ const BookingsPage = () => {
                     <span className="text-yellow-400">Pending</span>
                   )}
                 </p>
+                <p className="text-sm text-gray-300">
+                  <span className="font-semibold text-white">Location:</span>{" "}
+                  {b.readableLocation || "N/A"}
+                </p>
               </div>
 
               <div className="mt-3 md:mt-0 flex flex-col gap-2">
                 <span
                   className={`px-4 py-2 rounded-full text-sm font-medium flex items-center justify-center ${
-                    statusStyles[b.status] || "bg-gray-500 text-white"
+                    statusStyles[b.status]
                   }`}
                 >
                   {statusIcons[b.status]}

@@ -6,6 +6,7 @@ import { IoClose } from "react-icons/io5";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/dist/ScrollTrigger";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { PiSpinner } from "react-icons/pi";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -24,6 +25,7 @@ const Portfolio = () => {
   const [selectedItem, setSelectedItem] = useState<PortfolioItem | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxType, setLightboxType] = useState<"image" | "video">("image");
+  const [loading, setLoading] = useState(true);
 
   const cardsRef = useRef<HTMLDivElement[]>([]);
   const thumbnailsRef = useRef<HTMLDivElement>(null);
@@ -66,8 +68,13 @@ const Portfolio = () => {
     setServices(enrichedServices);
   };
 
+  // Fetch portfolio immediately on component load
   useEffect(() => {
-    fetchPortfolio();
+    (async () => {
+      setLoading(true);
+      await fetchPortfolio();
+      setLoading(false);
+    })();
   }, []);
 
   const filteredServices =
@@ -141,55 +148,99 @@ const Portfolio = () => {
       <div className="container mx-auto px-6 text-center">
         <h2 className="text-4xl font-bold mb-8">Our Portfolio</h2>
 
-        {/* Service Filters */}
-        <div className="flex flex-wrap justify-center gap-4 mb-12">
-          {["All", ...services.map((s) => s.title)].map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setActiveService(cat)}
-              className={`px-4 py-2 rounded-full cursor-pointer font-medium transition ${
-                activeService === cat
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-700 text-gray-200 hover:bg-blue-500"
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
+        {loading ? (
+          <div className="text-white w-full flex items-center justify-center gap-2 text-xl">
+            <PiSpinner className="text-xl animate-spin" /> Loading portfolio...
+          </div>
+        ) : (
+          <>
+            {/* Service Filters - Horizontal Scroll with Floating Icons & Snap */}
+            <div className="relative mb-12">
+              {/* Left Fade Gradient */}
+              <div className="pointer-events-none absolute left-0 top-0 h-full w-12 bg-gradient-to-r from-black/80 to-transparent z-10 hidden md:block" />
+              {/* Right Fade Gradient */}
+              <div className="pointer-events-none absolute right-0 top-0 h-full w-12 bg-gradient-to-l from-black/80 to-transparent z-10 hidden md:block" />
 
-        {/* Portfolio Grid */}
-        <div className="grid md:grid-cols-3 gap-8">
-          {filteredServices.map((item, idx) => (
-            <div
-              key={item.id}
-              ref={(el) => {
-                if (el) cardsRef.current[idx] = el;
-              }}
-              className="bg-[rgba(0,0,0,0.4)] backdrop-blur-3xl border border-gray-100/40 rounded-lg shadow-lg overflow-hidden cursor-pointer hover:scale-105 transition-transform duration-300"
-              onClick={() => {
-                setSelectedItem(item);
-                setLightboxIndex(0);
-                setLightboxType("image");
-              }}
-            >
-              {item.images[0] && (
-                <Image
-                  src={item.images[0]}
-                  alt={item.title}
-                  width={500}
-                  height={400}
-                  className="w-full h-48 object-cover"
-                />
-              )}
-              <div className="p-6">
-                <h3 className="text-xl font-semibold text-amber-400">
-                  {item.title}
-                </h3>
+              {/* Left Scroll Icon */}
+              <button
+                onClick={() => {
+                  const container =
+                    document.getElementById("filters-container");
+                  if (container)
+                    container.scrollBy({ left: -200, behavior: "smooth" });
+                }}
+                className="hidden cursor-pointer md:flex absolute left-0 top-1/2 -translate-y-1/2 z-20 text-white text-4xl lg:text-2xl opacity-40 hover:opacity-90 transition px-2"
+              >
+                ‹
+              </button>
+
+              {/* Right Scroll Icon */}
+              <button
+                onClick={() => {
+                  const container =
+                    document.getElementById("filters-container");
+                  if (container)
+                    container.scrollBy({ left: 200, behavior: "smooth" });
+                }}
+                className="hidden cursor-pointer md:flex absolute right-0 top-1/2 -translate-y-1/2 z-20 text-white text-4xl lg:text-2xl opacity-40 hover:opacity-90 transition px-2"
+              >
+                ›
+              </button>
+
+              <div
+                id="filters-container"
+                className="overflow-x-auto scrollbar-hide flex gap-4 px-4 snap-x snap-mandatory"
+              >
+                {["All", ...services.map((s) => s.title)].map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveService(cat)}
+                    className={`flex-shrink-0 snap-start px-4 py-2 rounded-full cursor-pointer font-medium transition whitespace-nowrap ${
+                      activeService === cat
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-700 text-gray-200 hover:bg-blue-500"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
+
+            {/* Portfolio Grid */}
+            <div className="grid md:grid-cols-3 gap-8">
+              {filteredServices.map((item, idx) => (
+                <div
+                  key={item.id}
+                  ref={(el) => {
+                    if (el) cardsRef.current[idx] = el;
+                  }}
+                  className="bg-[rgba(0,0,0,0.4)] backdrop-blur-3xl border border-gray-100/40 rounded-lg shadow-lg overflow-hidden cursor-pointer hover:scale-105 transition-transform duration-300"
+                  onClick={() => {
+                    setSelectedItem(item);
+                    setLightboxIndex(0);
+                    setLightboxType("image");
+                  }}
+                >
+                  {item.images[0] && (
+                    <Image
+                      src={item.images[0]}
+                      alt={item.title}
+                      width={500}
+                      height={400}
+                      className="w-full h-48 object-cover"
+                    />
+                  )}
+                  <div className="p-6">
+                    <h3 className="text-xl font-semibold text-amber-400">
+                      {item.title}
+                    </h3>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Lightbox Modal */}
@@ -287,7 +338,7 @@ const Portfolio = () => {
               {/* Thumbnails */}
               <div
                 ref={thumbnailsRef}
-                className="grid   grid-cols-2 sm:grid-cols-3 gap-4"
+                className="grid grid-cols-2 sm:grid-cols-3 gap-4"
               >
                 {lightboxType === "image"
                   ? selectedItem.images.map((img, idx) => (

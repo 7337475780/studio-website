@@ -20,13 +20,17 @@ const Navbar = () => {
   const [role, setRole] = useState<string | null>(
     () => Cookies.get("role") || null
   );
-
   const [isOpen, setIsOpen] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
-  const linksRef = useRef<HTMLDivElement>(null);
+
+  const desktopLinksRef = useRef<HTMLDivElement>(null);
+  const desktopUnderlineRef = useRef<HTMLDivElement>(null);
+
+  const linksRef = useRef<HTMLDivElement>(null); // Mobile links
+  const mobileUnderlineRef = useRef<HTMLDivElement>(null);
 
   // Keep role synced with cookie
   useEffect(() => {
@@ -84,6 +88,45 @@ const Navbar = () => {
     });
   }, [isOpen]);
 
+  // Animate underline on active link change
+  useEffect(() => {
+    // Desktop
+    if (desktopLinksRef.current && desktopUnderlineRef.current) {
+      const activeLink = Array.from(desktopLinksRef.current.children).find(
+        (child: any) => child.dataset?.path === pathname
+      ) as HTMLElement;
+
+      if (activeLink) {
+        gsap.to(desktopUnderlineRef.current, {
+          width: activeLink.offsetWidth,
+          x: activeLink.offsetLeft,
+          duration: 0.3,
+          ease: "power3.out",
+        });
+      } else {
+        gsap.to(desktopUnderlineRef.current, { width: 0, duration: 0.2 });
+      }
+    }
+
+    // Mobile
+    if (linksRef.current && mobileUnderlineRef.current) {
+      const activeLink = Array.from(linksRef.current.children).find(
+        (child: any) => child.dataset?.path === pathname
+      ) as HTMLElement;
+
+      if (activeLink) {
+        gsap.to(mobileUnderlineRef.current, {
+          width: activeLink.offsetWidth,
+          x: activeLink.offsetLeft,
+          duration: 0.3,
+          ease: "power3.out",
+        });
+      } else {
+        gsap.to(mobileUnderlineRef.current, { width: 0, duration: 0.2 });
+      }
+    }
+  }, [pathname, isOpen]);
+
   const openMenu = () => {
     setShowNotifications(false);
     setShowProfileDropdown(false);
@@ -126,27 +169,38 @@ const Navbar = () => {
     <nav className="bg-[rgba(0,0,0,0.4)] sticky top-0 z-50 backdrop-blur-md text-white p-2 flex justify-between items-center">
       {/* Logo */}
       <div className="flex items-center gap-2">
-        <Link href="/" className="flex items-center gap-2 text-2xl">
-          <Image src="/images/logo.png" width={32} height={32} alt="Logo" />
-          <h1 className="text-2xl sm:text-3xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-blue-500 to-gray-400">
+        <Link href="/" className="flex gap-2 items-center">
+          <Image
+            src="/images/logo.png"
+            width={32}
+            height={32}
+            alt="Logo"
+            className="cursor-pointer"
+          />
+          <h1 className="text-2xl hidden md:flex font-semibold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-blue-500 to-gray-400">
             Suresh Digitals
           </h1>
         </Link>
       </div>
 
       {/* Desktop Menu */}
-      <div className="hidden md:flex items-center gap-4">
-        {NavbarItems.map(({ label, path }) => (
-          <Link
-            key={label}
-            href={path}
-            className={`relative py-1 px-2 hover:text-blue-400 ${
-              pathname === path ? "text-blue-400" : "text-white"
-            }`}
-          >
-            {label}
-          </Link>
-        ))}
+      <div className="hidden md:flex items-center gap-4 relative">
+        <div className="relative flex items-center gap-4" ref={desktopLinksRef}>
+          {NavbarItems.map(({ label, path }) => (
+            <Link
+              key={label}
+              href={path}
+              className="relative py-1 px-2 text-white hover:text-blue-400"
+              data-path={path}
+            >
+              {label}
+            </Link>
+          ))}
+          <div
+            ref={desktopUnderlineRef}
+            className="absolute bottom-0 left-0 h-[2px] bg-blue-500 w-0"
+          />
+        </div>
 
         {/* Admin Notifications */}
         {role === "admin" && (
@@ -161,7 +215,7 @@ const Navbar = () => {
               )}
             </button>
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-96 max-h-[70vh]  rounded-lg shadow-lg bg-white dark:bg-gray-900 p-2">
+              <div className="absolute right-0 mt-2 w-96 max-h-[70vh] rounded-lg shadow-lg bg-white dark:bg-gray-900 p-2">
                 <NotificationsList initialNotifications={notifications} />
               </div>
             )}
@@ -236,7 +290,6 @@ const Navbar = () => {
           </div>
         )}
 
-        {/* Profile */}
         {user?.user_metadata?.avatar_url && (
           <div className="relative">
             <button
@@ -254,7 +307,6 @@ const Navbar = () => {
           </div>
         )}
 
-        {/* Login Button */}
         {!user && (
           <button
             onClick={login}
@@ -282,20 +334,23 @@ const Navbar = () => {
       {isOpen && (
         <div
           ref={linksRef}
-          className="absolute top-full right-0 w-[40%] rounded bg-[rgba(0,0,0,0.4)] backdrop-blur-md flex flex-col items-center md:hidden"
+          className="absolute top-full right-0 w-[40%] rounded bg-[rgba(0,0,0,0.4)] backdrop-blur-md flex flex-col items-center md:hidden relative"
         >
           {NavbarItems.map(({ label, path }) => (
             <Link
               key={label}
               href={path}
-              className={`py-3 font-medium text-white w-full text-center border-b border-gray-700 ${
-                pathname === path ? "bg-blue-500" : "hover:bg-blue-600"
-              }`}
+              className="py-3 font-medium text-white w-full text-center border-b-2 border-transparent hover:bg-blue-600"
+              data-path={path}
               onClick={closeMenu}
             >
               {label}
             </Link>
           ))}
+          <div
+            ref={mobileUnderlineRef}
+            className="absolute bottom-0 left-0 h-[2px] bg-blue-500 w-0"
+          />
         </div>
       )}
 
