@@ -6,30 +6,28 @@ import { usePathname, useRouter } from "next/navigation";
 import React, { useState, useEffect, useRef } from "react";
 import { IoMenuSharp, IoClose, IoNotificationsOutline } from "react-icons/io5";
 import gsap from "gsap";
-import { supabase } from "@/lib/supabaseClient";
+import Cookies from "js-cookie";
 import { useAuth } from "@/components/AuthProvider";
 import { NavbarItems } from "@/lib/data";
 import NotificationsList from "@/app/admin/dashboard/NotificationList";
-import Cookies from "js-cookie";
+import { useNotifications } from "@/components/NotificationProvider";
 
 const Navbar = () => {
+  const { user, login, logout } = useAuth();
+  const { notifications, markAsRead } = useNotifications();
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
+
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout, login } = useAuth();
-
-  const [role, setRole] = useState<string | null>(
-    () => Cookies.get("role") || null
-  );
+  const [role, setRole] = useState<string | null>(() => Cookies.get("role") || null);
   const [isOpen, setIsOpen] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
 
   const desktopLinksRef = useRef<HTMLDivElement>(null);
   const desktopUnderlineRef = useRef<HTMLDivElement>(null);
-
-  const linksRef = useRef<HTMLDivElement>(null); // Mobile links
+  const linksRef = useRef<HTMLDivElement>(null);
   const mobileUnderlineRef = useRef<HTMLDivElement>(null);
 
   // Keep role synced with cookie
@@ -41,40 +39,9 @@ const Navbar = () => {
     return () => clearInterval(interval);
   }, [role]);
 
-  // Fetch notifications for admin
-  useEffect(() => {
-    if (role !== "admin") return;
-
-    const fetchNotifications = async () => {
-      const { data, error } = await supabase
-        .from("notifications")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (!error) setNotifications(data || []);
-    };
-
-    fetchNotifications();
-
-    const channel = supabase
-      .channel("public:notifications")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications" },
-        (payload) => setNotifications((prev) => [payload.new, ...prev])
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel).catch(console.error);
-    };
-  }, [role]);
-
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
-
-  // Mobile menu open animation
+  // Mobile menu animation
   useEffect(() => {
     if (!isOpen || !linksRef.current) return;
-
     setIsAnimating(true);
     const links = Array.from(linksRef.current.children) as HTMLElement[];
     gsap.set(links, { y: -20, opacity: 0 });
@@ -88,100 +55,54 @@ const Navbar = () => {
     });
   }, [isOpen]);
 
-  // Animate underline on active link change
+  // Active link underline animation
   useEffect(() => {
-    // Desktop
-    if (desktopLinksRef.current && desktopUnderlineRef.current) {
-      const activeLink = Array.from(desktopLinksRef.current.children).find(
+    const animateUnderline = (
+      container: HTMLDivElement | null,
+      underline: HTMLDivElement | null
+    ) => {
+      if (!container || !underline) return;
+      const activeLink = Array.from(container.children).find(
         (child: any) => child.dataset?.path === pathname
       ) as HTMLElement;
 
       if (activeLink) {
-        gsap.to(desktopUnderlineRef.current, {
+        gsap.to(underline, {
           width: activeLink.offsetWidth,
           x: activeLink.offsetLeft,
           duration: 0.3,
           ease: "power3.out",
         });
       } else {
-        gsap.to(desktopUnderlineRef.current, { width: 0, duration: 0.2 });
+        gsap.to(underline, { width: 0, duration: 0.2 });
       }
-    }
+    };
 
-    // Mobile
-    if (linksRef.current && mobileUnderlineRef.current) {
-      const activeLink = Array.from(linksRef.current.children).find(
-        (child: any) => child.dataset?.path === pathname
-      ) as HTMLElement;
-
-      if (activeLink) {
-        gsap.to(mobileUnderlineRef.current, {
-          width: activeLink.offsetWidth,
-          x: activeLink.offsetLeft,
-          duration: 0.3,
-          ease: "power3.out",
-        });
-      } else {
-        gsap.to(mobileUnderlineRef.current, { width: 0, duration: 0.2 });
-      }
-    }
+    animateUnderline(desktopLinksRef.current, desktopUnderlineRef.current);
+    animateUnderline(linksRef.current, mobileUnderlineRef.current);
   }, [pathname, isOpen]);
 
-  const openMenu = () => {
-    setShowNotifications(false);
-    setShowProfileDropdown(false);
-    setIsOpen(true);
-  };
-
-  const closeMenu = () => {
-    if (!linksRef.current) {
-      setIsOpen(false);
-      return;
-    }
-    setIsAnimating(true);
-    const links = Array.from(linksRef.current.children) as HTMLElement[];
-    gsap.to(links, {
-      y: -20,
-      opacity: 0,
-      stagger: 0.05,
-      duration: 0.2,
-      ease: "power3.in",
-      onComplete: () => {
-        setIsOpen(false);
-        setIsAnimating(false);
-      },
-    });
-  };
-
-  const handleNotificationsToggle = () => {
-    setShowProfileDropdown(false);
-    setIsOpen(false);
+  // Mark notifications as read when opening notification list
+  const handleShowNotifications = () => {
     setShowNotifications((prev) => !prev);
-  };
-
-  const handleProfileToggle = () => {
-    setShowNotifications(false);
+    setShowProfileDropdown(false);
     setIsOpen(false);
-    setShowProfileDropdown((prev) => !prev);
+
+    // Mark all unread notifications as read immediately
+    notifications.forEach((n) => {
+      if (!n.is_read) markAsRead(n.id);
+    });
   };
 
   return (
     <nav className="bg-[rgba(0,0,0,0.4)] sticky top-0 z-50 backdrop-blur-md text-white p-2 flex justify-between items-center">
       {/* Logo */}
-      <div className="flex items-center gap-2">
-        <Link href="/" className="flex gap-2 items-center">
-          <Image
-            src="/images/logo.png"
-            width={32}
-            height={32}
-            alt="Logo"
-            className="cursor-pointer"
-          />
-          <h1 className="text-2xl hidden md:flex font-semibold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-blue-500 to-gray-400">
-            Suresh Digitals
-          </h1>
-        </Link>
-      </div>
+      <Link href="/" className="flex items-center gap-2">
+        <Image src="/images/logo.png" alt="Logo" width={32} height={32} />
+        <h1 className="text-2xl hidden md:flex font-semibold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-blue-500 to-gray-400">
+          Suresh Digitals
+        </h1>
+      </Link>
 
       {/* Desktop Menu */}
       <div className="hidden md:flex items-center gap-4 relative">
@@ -190,8 +111,8 @@ const Navbar = () => {
             <Link
               key={label}
               href={path}
-              className="relative py-1 px-2 text-white hover:text-blue-400"
               data-path={path}
+              className="relative py-1 px-2 text-white hover:text-blue-400"
             >
               {label}
             </Link>
@@ -202,11 +123,11 @@ const Navbar = () => {
           />
         </div>
 
-        {/* Admin Notifications */}
+        {/* Notifications */}
         {role === "admin" && (
           <div className="relative">
             <button
-              onClick={handleNotificationsToggle}
+              onClick={handleShowNotifications}
               className="relative p-2 rounded-full hover:bg-gray-700"
             >
               <IoNotificationsOutline size={24} />
@@ -216,7 +137,7 @@ const Navbar = () => {
             </button>
             {showNotifications && (
               <div className="absolute right-0 mt-2 w-96 max-h-[70vh] rounded-lg shadow-lg bg-white dark:bg-gray-900 p-2">
-                <NotificationsList initialNotifications={notifications} />
+                <NotificationsList />
               </div>
             )}
           </div>
@@ -235,7 +156,13 @@ const Navbar = () => {
         {/* Profile */}
         {user?.user_metadata?.avatar_url ? (
           <div className="relative">
-            <button onClick={handleProfileToggle}>
+            <button
+              onClick={() => {
+                setShowProfileDropdown((prev) => !prev);
+                setShowNotifications(false);
+                setIsOpen(false);
+              }}
+            >
               <Image
                 src={user.user_metadata.avatar_url}
                 alt="Profile"
@@ -265,7 +192,7 @@ const Navbar = () => {
         )}
       </div>
 
-      {/* Mobile Section */}
+      {/* Mobile */}
       <div className="md:hidden flex items-center gap-2">
         {role === "admin" && (
           <Link
@@ -277,34 +204,33 @@ const Navbar = () => {
         )}
 
         {role === "admin" && (
-          <div className="relative">
-            <button
-              onClick={handleNotificationsToggle}
-              className="relative p-2 cursor-pointer rounded-full hover:bg-gray-700 transition"
-            >
-              <IoNotificationsOutline size={24} />
-              {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-              )}
-            </button>
-          </div>
+          <button
+            onClick={handleShowNotifications}
+            className="relative p-2 cursor-pointer rounded-full hover:bg-gray-700 transition"
+          >
+            <IoNotificationsOutline size={24} />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+            )}
+          </button>
         )}
 
         {user?.user_metadata?.avatar_url && (
-          <div className="relative">
-            <button
-              onClick={handleProfileToggle}
-              className="rounded-full border border-gray-100/20"
-            >
-              <Image
-                src={user.user_metadata.avatar_url}
-                alt="Profile Picture"
-                width={32}
-                height={32}
-                className="rounded-full object-cover cursor-pointer"
-              />
-            </button>
-          </div>
+          <button
+            onClick={() => {
+              setShowProfileDropdown((prev) => !prev);
+              setShowNotifications(false);
+              setIsOpen(false);
+            }}
+          >
+            <Image
+              src={user.user_metadata.avatar_url}
+              alt="Profile Picture"
+              width={32}
+              height={32}
+              className="rounded-full object-cover cursor-pointer"
+            />
+          </button>
         )}
 
         {!user && (
@@ -316,9 +242,8 @@ const Navbar = () => {
           </button>
         )}
 
-        {/* Hamburger Menu */}
         <button
-          onClick={isOpen ? closeMenu : openMenu}
+          onClick={() => setIsOpen((prev) => !prev)}
           aria-label="Menu"
           disabled={isAnimating}
         >
@@ -340,9 +265,8 @@ const Navbar = () => {
             <Link
               key={label}
               href={path}
-              className="py-3 font-medium text-white w-full text-center border-b-2 border-transparent hover:bg-blue-600"
               data-path={path}
-              onClick={closeMenu}
+              className="py-3 font-medium text-white w-full text-center border-b-2 border-transparent hover:bg-blue-600"
             >
               {label}
             </Link>
@@ -367,7 +291,7 @@ const Navbar = () => {
       )}
       {showNotifications && role === "admin" && (
         <div className="absolute top-16 right-2 md:hidden w-80 max-h-[70vh] overflow-hidden rounded-lg shadow-lg bg-white dark:bg-gray-900 p-2">
-          <NotificationsList initialNotifications={notifications} />
+          <NotificationsList fullScreen />
         </div>
       )}
     </nav>

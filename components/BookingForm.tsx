@@ -276,7 +276,7 @@ const BookingForm = () => {
     );
 
   return (
-    <div className="max-w-xl mx-auto p-6 bg-gray-900 text-white rounded-xl shadow-2xl space-y-6 relative">
+    <div className="max-w-xl mt-10 mx-auto p-6 bg-gray-900 text-white rounded-xl shadow-2xl space-y-6 relative">
       {/* Stepper */}
       <div className="flex items-center justify-between relative mb-6">
         {steps.map((s, i) => {

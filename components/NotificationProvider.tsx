@@ -48,7 +48,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) return console.error("Fetch error:", error);
+      if (error) return console.error("Fetch notifications error:", error);
 
       setNotifications(data || []);
       setUnreadCount((data || []).filter((n) => !n.is_read).length);
@@ -57,43 +57,91 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     fetchNotifications();
   }, []);
 
-  // Realtime subscription
+  // Real-time subscription
   useEffect(() => {
-    const channel = supabase
-      .channel("notifications_channel")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications" },
-        (payload) => {
-          if (!payload.new) return;
+    let channel = supabase.channel("notifications_channel");
 
-          const newNotif: Notification = {
+    const handleInsert = (payload: any) => {
+      if (!payload.new) return;
+      setNotifications((prev) => {
+        const updated = [
+          {
             id: payload.new.id,
             type: payload.new.type,
             booking_id: payload.new.booking_id,
             message: payload.new.message,
-            is_read: payload.new.is_read ?? false, // default if null
+            is_read: payload.new.is_read ?? false,
             created_at: payload.new.created_at,
-          };
+          },
+          ...prev,
+        ];
+        setUnreadCount(updated.filter((n) => !n.is_read).length);
+        return updated;
+      });
+    };
 
-          setNotifications((prev) => [newNotif, ...prev]);
-          setUnreadCount((prev) => prev + 1);
-        }
+    const handleUpdate = (payload: any) => {
+      if (!payload.new) return;
+      setNotifications((prev) => {
+        const updated = prev.map((n) =>
+          n.id === payload.new.id
+            ? { ...n, is_read: payload.new.is_read ?? false }
+            : n
+        );
+        setUnreadCount(updated.filter((n) => !n.is_read).length);
+        return updated;
+      });
+    };
+
+    const subscribe = () => {
+      channel = supabase.channel("notifications_channel");
+
+      // Listen for new notifications
+      channel.on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications" },
+        handleInsert
       );
 
-    const subscription = channel.subscribe();
+      // Listen for read updates
+      channel.on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "notifications" },
+        handleUpdate
+      );
+
+      // Subscribe with callback to handle status
+      channel.subscribe((status) => {
+        if (
+          status === "TIMED_OUT" ||
+          status === "CLOSED" ||
+          status === "CHANNEL_ERROR"
+        ) {
+          console.warn("Notifications subscription closed:", status);
+          // Retry automatically
+          setTimeout(subscribe, 3000);
+        }
+      });
+    };
+
+    subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      channel.unsubscribe();
     };
   }, []);
 
+  // Mark notification as read
   const markAsRead = async (id: string) => {
     await supabase.from("notifications").update({ is_read: true }).eq("id", id);
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
-    );
-    setUnreadCount((prev) => Math.max(prev - 1, 0));
+
+    setNotifications((prev) => {
+      const updated = prev.map((n) =>
+        n.id === id ? { ...n, is_read: true } : n
+      );
+      setUnreadCount(updated.filter((n) => !n.is_read).length);
+      return updated;
+    });
   };
 
   return (
